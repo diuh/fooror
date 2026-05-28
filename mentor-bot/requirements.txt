@@ -1,0 +1,5 @@
+python-telegram-bot==21.11.1
+anthropic==0.105.0
+aiosqlite==0.22.1
+python-dotenv==1.2.2
+pytz==2026.2
