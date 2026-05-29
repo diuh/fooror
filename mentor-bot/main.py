@@ -1,5 +1,4 @@
 import logging
-import re
 
 from telegram import BotCommand, Update
 from telegram.ext import (
@@ -8,7 +7,9 @@ from telegram.ext import (
     CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
+    MessageHandler,
     TypeHandler,
+    filters,
 )
 
 import database as db
@@ -162,17 +163,12 @@ def main() -> None:
     app.add_handler(CommandHandler("weekly_plan", weekly_plan))
     app.add_handler(CommandHandler("brand", brand))
 
+    # Dynamic commands like /lead_update_5 arrive as messages. CommandHandler
+    # only matches static command names, so we match the pattern with a regex
+    # MessageHandler — this also populates context.matches used by the handler.
     app.add_handler(
-        CommandHandler(
-            "lead_update_",
-            lead_update_show,
-            filters=None,
-        )
-    )
-
-    app.add_handler(
-        CommandHandler(
-            re.compile(r"^lead_update_(\d+)$"),
+        MessageHandler(
+            filters.Regex(r"^/lead_update_(\d+)$"),
             lead_update_show,
         )
     )
