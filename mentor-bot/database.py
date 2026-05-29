@@ -127,6 +127,26 @@ async def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_tasks_date      ON tasks(task_date);
         """)
 
+        # Migration: add horizon/period_key to pre-existing tasks tables and
+        # backfill day-level rows (period_key = task_date) so older DBs upgrade
+        # cleanly on Railway without losing data.
+        async with db.execute("PRAGMA table_info(tasks)") as cur:
+            cols = {r["name"] for r in await cur.fetchall()}
+        if "horizon" not in cols:
+            await db.execute(
+                "ALTER TABLE tasks ADD COLUMN horizon TEXT NOT NULL DEFAULT 'day'"
+            )
+        if "period_key" not in cols:
+            await db.execute(
+                "ALTER TABLE tasks ADD COLUMN period_key TEXT NOT NULL DEFAULT ''"
+            )
+            await db.execute(
+                "UPDATE tasks SET period_key = task_date WHERE period_key = ''"
+            )
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_tasks_period ON tasks(horizon, period_key)"
+        )
+
         await db.execute(
             "INSERT OR IGNORE INTO config(key, value) VALUES (?, ?)",
             ("monthly_goal", "10000"),
@@ -530,11 +550,12 @@ async def delete_task(task_id: int) -> None:
 
 
 async def get_month_task_stats(month: str) -> dict:
-    """Completion stats for all tasks in a YYYY-MM month."""
+    """Completion stats for day-level tasks in a YYYY-MM month. Week/month
+    horizon rows are excluded so higher levels don't double-count."""
     async with get_db() as db:
         async with db.execute(
             """SELECT COUNT(*) as total, COALESCE(SUM(done),0) as done
-               FROM tasks WHERE substr(task_date,1,7) = ?""",
+               FROM tasks WHERE horizon = 'day' AND substr(period_key,1,7) = ?""",
             (month,),
         ) as cur:
             row = await cur.fetchone()
