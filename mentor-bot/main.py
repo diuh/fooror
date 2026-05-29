@@ -50,7 +50,7 @@ from handlers.sales import (
 from handlers.content import (
     brand,
     post_idea_conversation,
-    weekly_plan,
+    weekly_plan_conversation,
 )
 from handlers.tasks import (
     channels_conversation,
@@ -153,6 +153,7 @@ def main() -> None:
         outreach_conversation(),
         ask_conversation(),
         post_idea_conversation(),
+        weekly_plan_conversation(),
         plan_day_conversation(),
         setgoal_conversation(),
         channels_conversation(),
@@ -177,7 +178,7 @@ def main() -> None:
     app.add_handler(CommandHandler("review_week", review_week))
     app.add_handler(CommandHandler("motivate", motivate))
     app.add_handler(CommandHandler("content_list", content_list))
-    app.add_handler(CommandHandler("weekly_plan", weekly_plan))
+
     app.add_handler(CommandHandler("brand", brand))
     app.add_handler(CommandHandler("tasks", tasks_cmd))
     app.add_handler(CommandHandler("month_review", month_review))

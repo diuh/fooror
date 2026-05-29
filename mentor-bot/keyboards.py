@@ -82,6 +82,18 @@ def platform_keyboard() -> InlineKeyboardMarkup:
     ])
 
 
+def weekly_platforms_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("LinkedIn + Instagram", callback_data="wplat_li_ig"),
+            InlineKeyboardButton("LinkedIn + Behance", callback_data="wplat_li_be"),
+        ],
+        [
+            InlineKeyboardButton("Всі (LinkedIn, Instagram, Behance, Telegram)", callback_data="wplat_all"),
+        ],
+    ])
+
+
 def save_cancel_keyboard(save_cb: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[
         InlineKeyboardButton("💾 Зберегти", callback_data=save_cb),
