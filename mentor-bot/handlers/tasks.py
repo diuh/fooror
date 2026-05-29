@@ -545,16 +545,18 @@ async def free_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if "[ЗАДАЧІ]" in answer:
         block = answer.split("[ЗАДАЧІ]", 1)[1]
         new_tasks = parse_task_lines(block)
-        if new_tasks:
-            await db.replace_tasks(today(), new_tasks)
-            saved = await db.get_tasks(today())
-            _remember(context, "assistant", "(оновив задачі на сьогодні)")
+        await db.replace_tasks(today(), new_tasks)
+        saved = await db.get_tasks(today())
+        _remember(context, "assistant", "(оновив задачі на сьогодні)")
+        if saved:
             await update.message.reply_text(
                 "✏️ " + format_tasks_text(saved),
                 parse_mode="HTML",
                 reply_markup=keyboards.tasks_keyboard(saved),
             )
-            return
+        else:
+            await update.message.reply_text("🗑 Усі задачі на сьогодні видалено.")
+        return
 
     if "[КОНТЕНТ-ПЛАН]" in answer:
         plan_text = answer.split("[КОНТЕНТ-ПЛАН]", 1)[1].strip()
