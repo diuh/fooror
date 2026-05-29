@@ -56,11 +56,14 @@ from handlers.content import (
 from handlers.tasks import (
     channels_conversation,
     free_text_handler,
+    month_cmd,
     month_review,
     plan_day_conversation,
+    plan_overview,
     setgoal_conversation,
     task_toggle,
     tasks_cmd,
+    week_cmd,
 )
 
 logging.basicConfig(
@@ -102,7 +105,12 @@ async def post_init(application: Application) -> None:
         BotCommand("morning", "Ранковий check-in"),
         BotCommand("evening", "Вечірній review"),
         BotCommand("plan_day", "Скласти план задач на день"),
+        BotCommand("plan_week", "Скласти план на тиждень"),
+        BotCommand("plan_month", "Скласти план на місяць"),
         BotCommand("tasks", "Задачі на сьогодні"),
+        BotCommand("week", "Пріоритети тижня"),
+        BotCommand("month", "Цілі місяця"),
+        BotCommand("plan", "Огляд усіх планів"),
         BotCommand("setgoal", "Поставити ціль на місяць"),
         BotCommand("month_review", "Аналіз місяця"),
         BotCommand("channels", "Підбір каналів залучення"),
@@ -192,6 +200,9 @@ def main() -> None:
 
     app.add_handler(CommandHandler("brand", brand))
     app.add_handler(CommandHandler("tasks", tasks_cmd))
+    app.add_handler(CommandHandler("week", week_cmd))
+    app.add_handler(CommandHandler("month", month_cmd))
+    app.add_handler(CommandHandler("plan", plan_overview))
     app.add_handler(CommandHandler("month_review", month_review))
 
     # Dynamic commands like /lead_update_5 arrive as messages. CommandHandler
@@ -207,6 +218,9 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(lead_status_callback, pattern=r"^lstatus_"))
     app.add_handler(CallbackQueryHandler(task_toggle, pattern=r"^task_\d+$"))
     app.add_handler(CallbackQueryHandler(tasks_cmd, pattern=r"^cmd_tasks$"))
+    app.add_handler(CallbackQueryHandler(week_cmd, pattern=r"^cmd_week$"))
+    app.add_handler(CallbackQueryHandler(month_cmd, pattern=r"^cmd_month$"))
+    app.add_handler(CallbackQueryHandler(plan_overview, pattern=r"^cmd_plan_overview$"))
     app.add_handler(CallbackQueryHandler(menu_callback, pattern=r"^(cmd_|cancel)"))
 
     # Lowest-priority catch-all: free-text not consumed by a command or an

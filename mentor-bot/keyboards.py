@@ -8,6 +8,13 @@ def main_menu() -> InlineKeyboardMarkup:
             InlineKeyboardButton("✅ Задачі", callback_data="cmd_tasks"),
         ],
         [
+            InlineKeyboardButton("🗓 План тижня", callback_data="cmd_plan_week"),
+            InlineKeyboardButton("📆 План місяця", callback_data="cmd_plan_month"),
+        ],
+        [
+            InlineKeyboardButton("🗂 Огляд планів", callback_data="cmd_plan_overview"),
+        ],
+        [
             InlineKeyboardButton("💰 Дохід", callback_data="cmd_income"),
             InlineKeyboardButton("🔗 Ліди", callback_data="cmd_leads"),
         ],

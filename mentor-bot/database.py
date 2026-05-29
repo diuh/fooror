@@ -105,6 +105,9 @@ async def init_db() -> None:
                 done       INTEGER NOT NULL DEFAULT 0,
                 source     TEXT NOT NULL DEFAULT 'ai'
                            CHECK(source IN ('ai','user')),
+                horizon    TEXT NOT NULL DEFAULT 'day'
+                           CHECK(horizon IN ('day','week','month')),
+                period_key TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 done_at    TEXT
             );
@@ -418,37 +421,39 @@ async def add_proposal(
 
 # ── Tasks ─────────────────────────────────────────────────────────────────────
 
-async def add_task(task_date: str, title: str, source: str = "ai") -> int:
+async def add_task(period_key: str, title: str, source: str = "ai", horizon: str = "day") -> int:
     async with get_db() as db:
         cur = await db.execute(
-            "INSERT INTO tasks(task_date, title, source) VALUES (?,?,?)",
-            (task_date, title, source),
+            "INSERT INTO tasks(task_date, title, source, horizon, period_key) VALUES (?,?,?,?,?)",
+            (period_key, title, source, horizon, period_key),
         )
         await db.commit()
         return cur.lastrowid
 
 
-async def add_tasks(task_date: str, titles: list[str], source: str = "ai") -> None:
+async def add_tasks(period_key: str, titles: list[str], source: str = "ai", horizon: str = "day") -> None:
     async with get_db() as db:
         await db.executemany(
-            "INSERT INTO tasks(task_date, title, source) VALUES (?,?,?)",
-            [(task_date, t, source) for t in titles],
+            "INSERT INTO tasks(task_date, title, source, horizon, period_key) VALUES (?,?,?,?,?)",
+            [(period_key, t, source, horizon, period_key) for t in titles],
         )
         await db.commit()
 
 
-async def get_tasks(task_date: str) -> list[dict]:
+async def get_tasks(period_key: str, horizon: str = "day") -> list[dict]:
     async with get_db() as db:
         async with db.execute(
-            "SELECT * FROM tasks WHERE task_date = ? ORDER BY id", (task_date,)
+            "SELECT * FROM tasks WHERE period_key = ? AND horizon = ? ORDER BY id",
+            (period_key, horizon),
         ) as cur:
             return [dict(r) for r in await cur.fetchall()]
 
 
-async def get_pending_tasks(task_date: str) -> list[dict]:
+async def get_pending_tasks(period_key: str, horizon: str = "day") -> list[dict]:
     async with get_db() as db:
         async with db.execute(
-            "SELECT * FROM tasks WHERE task_date = ? AND done = 0 ORDER BY id", (task_date,)
+            "SELECT * FROM tasks WHERE period_key = ? AND horizon = ? AND done = 0 ORDER BY id",
+            (period_key, horizon),
         ) as cur:
             return [dict(r) for r in await cur.fetchall()]
 
@@ -477,35 +482,43 @@ async def toggle_task(task_id: int) -> bool:
         return bool(new_done)
 
 
-async def delete_tasks_for_date(task_date: str, source: str | None = None) -> None:
+async def delete_tasks_for_period(period_key: str, horizon: str = "day", source: str | None = None) -> None:
     async with get_db() as db:
         if source:
             await db.execute(
-                "DELETE FROM tasks WHERE task_date = ? AND source = ?", (task_date, source)
+                "DELETE FROM tasks WHERE period_key = ? AND horizon = ? AND source = ?",
+                (period_key, horizon, source),
             )
         else:
-            await db.execute("DELETE FROM tasks WHERE task_date = ?", (task_date,))
+            await db.execute(
+                "DELETE FROM tasks WHERE period_key = ? AND horizon = ?",
+                (period_key, horizon),
+            )
         await db.commit()
 
 
-async def replace_tasks(task_date: str, titles: list[str]) -> None:
-    """Replace the day's task list, preserving the done-state of any task whose
-    title is unchanged (case-insensitive). Used when editing today's plan via
-    free text so already-completed tasks are not silently reset."""
+async def replace_tasks(period_key: str, titles: list[str], horizon: str = "day") -> None:
+    """Replace a period's task list, preserving the done-state of any task whose
+    title is unchanged (case-insensitive). Used when editing a plan via free
+    text so already-completed items are not silently reset."""
     async with get_db() as db:
         async with db.execute(
-            "SELECT title, done, done_at FROM tasks WHERE task_date = ?", (task_date,)
+            "SELECT title, done, done_at FROM tasks WHERE period_key = ? AND horizon = ?",
+            (period_key, horizon),
         ) as cur:
             prev = {
                 r["title"].strip().lower(): (r["done"], r["done_at"])
                 for r in await cur.fetchall()
             }
-        await db.execute("DELETE FROM tasks WHERE task_date = ?", (task_date,))
+        await db.execute(
+            "DELETE FROM tasks WHERE period_key = ? AND horizon = ?", (period_key, horizon)
+        )
         for title in titles:
             done, done_at = prev.get(title.strip().lower(), (0, None))
             await db.execute(
-                "INSERT INTO tasks(task_date, title, source, done, done_at) VALUES (?,?,?,?,?)",
-                (task_date, title, "ai", done, done_at),
+                "INSERT INTO tasks(task_date, title, source, horizon, period_key, done, done_at) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (period_key, title, "ai", horizon, period_key, done, done_at),
             )
         await db.commit()
 

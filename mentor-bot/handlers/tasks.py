@@ -20,7 +20,9 @@ from prompts.templates import (
     DAILY_PLAN_TEMPLATE,
     FREE_TEXT_TEMPLATE,
     MONTH_ANALYSIS_TEMPLATE,
+    MONTH_PLAN_TEMPLATE,
     MONTHLY_GOAL_TEMPLATE,
+    WEEK_PLAN_TEMPLATE,
 )
 
 # State ranges (kept distinct per feature for clarity)
@@ -31,6 +33,47 @@ CH_Q1, CH_Q2, CH_Q3 = range(820, 823)
 
 def today() -> str:
     return date.today().isoformat()
+
+
+def week_key(d: date | None = None) -> str:
+    """ISO week key like '2026-W22' (Monday-based)."""
+    d = d or date.today()
+    iso = d.isocalendar()
+    return f"{iso.year}-W{iso.week:02d}"
+
+
+def month_key(d: date | None = None) -> str:
+    return (d or date.today()).strftime("%Y-%m")
+
+
+# Metadata for the three planning horizons. `key` returns the current period
+# key; the rest drives wording shown to the user.
+HORIZON = {
+    "day": {
+        "key": today,
+        "emoji": "📋",
+        "list_title": "Задачі на сьогодні",
+        "noun": "задачі на сьогодні",
+        "cmd": "/plan_day",
+        "hint": "Тапни задачу щоб відмітити виконаною.",
+    },
+    "week": {
+        "key": week_key,
+        "emoji": "🗓",
+        "list_title": "Пріоритети тижня",
+        "noun": "пріоритети на тиждень",
+        "cmd": "/plan_week",
+        "hint": "Тапни пункт щоб відмітити виконаним.",
+    },
+    "month": {
+        "key": month_key,
+        "emoji": "🎯",
+        "list_title": "Цілі місяця",
+        "noun": "цілі на місяць",
+        "cmd": "/plan_month",
+        "hint": "Тапни ціль щоб відмітити досягнутою.",
+    },
+}
 
 
 def is_weekend() -> bool:
@@ -60,68 +103,144 @@ def parse_goal(text: str) -> float | None:
         return None
 
 
-async def generate_daily_tasks(
-    ctx: dict, bot=None, chat_id=None, content_plan: str | None = None
+def _items_block(header: str, items: list[dict] | None) -> str:
+    if not items:
+        return ""
+    lines = "\n".join(f"- {it['title']}" for it in items)
+    return f"\n{header}\n{lines}\n"
+
+
+async def generate_plan_items(
+    horizon: str,
+    ctx: dict,
+    bot=None,
+    chat_id=None,
+    content_plan: str | None = None,
+    upper_items: list[dict] | None = None,
 ) -> list[str]:
+    """Generate plan items for a horizon, cascading from the level above:
+    day ← week ← month. Day uses the fast model; week/month use the smart one."""
     from prompts.system import build_context_block
-    if content_plan:
-        content_plan_block = f"\nКОНТЕНТ-ПЛАН НА ТИЖДЕНЬ (враховуй який пост запланований на сьогодні):\n{content_plan}\n"
-    else:
-        content_plan_block = ""
-    prompt = DAILY_PLAN_TEMPLATE.format(
-        context_block=build_context_block(ctx),
-        content_plan_block=content_plan_block,
-    )
-    answer = await ai_client.ask(prompt, ctx, bot=bot, chat_id=chat_id)
+    cb = build_context_block(ctx)
+    cp_block = f"\nКОНТЕНТ-ПЛАН:\n{content_plan}\n" if content_plan else ""
+
+    if horizon == "day":
+        week_block = _items_block(
+            "ПЛАН НА ТИЖДЕНЬ (задачі мають бути кроками до цих пріоритетів):", upper_items
+        )
+        prompt = DAILY_PLAN_TEMPLATE.format(
+            context_block=cb, week_plan_block=week_block, content_plan_block=cp_block
+        )
+        answer = await ai_client.ask(prompt, ctx, bot=bot, chat_id=chat_id)
+    elif horizon == "week":
+        month_block = _items_block(
+            "ЦІЛІ НА МІСЯЦЬ (пріоритети мають бути кроками до них):", upper_items
+        )
+        prompt = WEEK_PLAN_TEMPLATE.format(
+            context_block=cb, month_plan_block=month_block, content_plan_block=cp_block
+        )
+        answer = await ai_client.ask_long(prompt, ctx, bot=bot, chat_id=chat_id)
+    else:  # month
+        goal = ctx.get("goal")
+        goal_block = f"\nФІНАНСОВА ЦІЛЬ МІСЯЦЯ: ${goal:,.0f}\n" if goal else ""
+        prompt = MONTH_PLAN_TEMPLATE.format(
+            context_block=cb, month=ctx.get("month", ""), goal_block=goal_block
+        )
+        answer = await ai_client.ask_long(prompt, ctx, bot=bot, chat_id=chat_id)
+
     return parse_task_lines(answer)
 
 
-def format_tasks_text(tasks: list[dict]) -> str:
+async def _upper_items(horizon: str) -> list[dict] | None:
+    """Fetch the level-above plan that the given horizon cascades from."""
+    if horizon == "day":
+        return await db.get_tasks(week_key(), "week")
+    if horizon == "week":
+        return await db.get_tasks(month_key(), "month")
+    return None
+
+
+async def generate_daily_tasks(
+    ctx: dict, bot=None, chat_id=None, content_plan: str | None = None
+) -> list[str]:
+    """Backward-compatible day generator used by the morning job."""
+    week_items = await db.get_tasks(week_key(), "week")
+    return await generate_plan_items(
+        "day", ctx, bot=bot, chat_id=chat_id, content_plan=content_plan, upper_items=week_items
+    )
+
+
+def format_tasks_text(tasks: list[dict], horizon: str = "day") -> str:
+    meta = HORIZON[horizon]
     if not tasks:
-        return "Задач на сьогодні ще немає. Склади план: /plan_day"
+        return f"{meta['noun'].capitalize()} ще не складено. Склади план: {meta['cmd']}"
     done = sum(1 for t in tasks if t["done"])
-    lines = [f"📋 <b>Задачі на сьогодні</b> ({done}/{len(tasks)})\n"]
+    lines = [f"{meta['emoji']} <b>{meta['list_title']}</b> ({done}/{len(tasks)})\n"]
     for t in tasks:
         mark = "✅" if t["done"] else "⬜️"
         lines.append(f"{mark} {t['title']}")
-    lines.append("\nТапни задачу щоб відмітити виконаною.")
+    lines.append(f"\n{meta['hint']}")
     return "\n".join(lines)
 
 
-# ── /plan_day ─────────────────────────────────────────────────────────────────
+# ── /plan_day · /plan_week · /plan_month (unified) ────────────────────────────
 
-async def plan_day_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def _plan_start(update: Update, context: ContextTypes.DEFAULT_TYPE, horizon: str) -> int:
+    context.user_data["plan_horizon"] = horizon
+    meta = HORIZON[horizon]
     if update.callback_query:
         await update.callback_query.answer()
         msg = update.callback_query.message
     else:
         msg = update.message
-    await msg.reply_text("⏳ Складаю план на сьогодні…")
+    await msg.reply_text(f"⏳ Складаю {meta['noun']}…")
     ctx = await db.build_context_snapshot()
     content_plan = context.user_data.get("last_content_plan")
-    tasks = await generate_daily_tasks(ctx, bot=msg.get_bot(), chat_id=msg.chat_id, content_plan=content_plan)
-    if not tasks:
-        await msg.reply_text("Не вдалось згенерувати план. Спробуй ще раз: /plan_day")
+    upper = await _upper_items(horizon)
+    items = await generate_plan_items(
+        horizon, ctx, bot=msg.get_bot(), chat_id=msg.chat_id,
+        content_plan=content_plan, upper_items=upper,
+    )
+    if not items:
+        await msg.reply_text(f"Не вдалось згенерувати. Спробуй ще раз: {meta['cmd']}")
         return ConversationHandler.END
-    context.user_data["proposed_tasks"] = tasks
-    preview = "\n".join(f"{i}. {t}" for i, t in enumerate(tasks, 1))
+    context.user_data["proposed_tasks"] = items
+    preview = "\n".join(f"{i}. {t}" for i, t in enumerate(items, 1))
     await msg.reply_text(
-        f"🎯 <b>Пропоную план на сьогодні:</b>\n\n{preview}",
+        f"{meta['emoji']} <b>Пропоную {meta['noun']}:</b>\n\n{preview}",
         parse_mode="HTML",
         reply_markup=keyboards.plan_confirm_keyboard(),
     )
     return PLAN_REVIEW
 
 
+async def plan_day_start(update, context):
+    return await _plan_start(update, context, "day")
+
+
+async def plan_week_start(update, context):
+    return await _plan_start(update, context, "week")
+
+
+async def plan_month_start(update, context):
+    return await _plan_start(update, context, "month")
+
+
+def _current_horizon(context: ContextTypes.DEFAULT_TYPE) -> str:
+    return context.user_data.get("plan_horizon", "day")
+
+
 async def plan_accept(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.callback_query.answer()
-    tasks = context.user_data.pop("proposed_tasks", [])
-    await db.delete_tasks_for_date(today(), source="ai")
-    if tasks:
-        await db.add_tasks(today(), tasks, source="ai")
-    saved = await db.get_tasks(today())
+    horizon = _current_horizon(context)
+    pkey = HORIZON[horizon]["key"]()
+    items = context.user_data.pop("proposed_tasks", [])
+    await db.delete_tasks_for_period(pkey, horizon=horizon, source="ai")
+    if items:
+        await db.add_tasks(pkey, items, source="ai", horizon=horizon)
+    saved = await db.get_tasks(pkey, horizon)
     await update.callback_query.message.reply_text(
-        format_tasks_text(saved),
+        format_tasks_text(saved, horizon),
         parse_mode="HTML",
         reply_markup=keyboards.tasks_keyboard(saved),
     )
@@ -130,17 +249,23 @@ async def plan_accept(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 
 async def plan_regen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.callback_query.answer("Генерую новий варіант…")
+    horizon = _current_horizon(context)
+    meta = HORIZON[horizon]
     msg = update.callback_query.message
     ctx = await db.build_context_snapshot()
     content_plan = context.user_data.get("last_content_plan")
-    tasks = await generate_daily_tasks(ctx, bot=msg.get_bot(), chat_id=msg.chat_id, content_plan=content_plan)
-    if not tasks:
-        await msg.reply_text("Не вдалось. Спробуй /plan_day")
+    upper = await _upper_items(horizon)
+    items = await generate_plan_items(
+        horizon, ctx, bot=msg.get_bot(), chat_id=msg.chat_id,
+        content_plan=content_plan, upper_items=upper,
+    )
+    if not items:
+        await msg.reply_text(f"Не вдалось. Спробуй {meta['cmd']}")
         return ConversationHandler.END
-    context.user_data["proposed_tasks"] = tasks
-    preview = "\n".join(f"{i}. {t}" for i, t in enumerate(tasks, 1))
+    context.user_data["proposed_tasks"] = items
+    preview = "\n".join(f"{i}. {t}" for i, t in enumerate(items, 1))
     await msg.reply_text(
-        f"🎯 <b>Новий варіант плану:</b>\n\n{preview}",
+        f"{meta['emoji']} <b>Новий варіант:</b>\n\n{preview}",
         parse_mode="HTML",
         reply_markup=keyboards.plan_confirm_keyboard(),
     )
@@ -149,22 +274,25 @@ async def plan_regen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 async def plan_add_own(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.callback_query.answer()
+    horizon = _current_horizon(context)
     await update.callback_query.message.reply_text(
-        "Напиши свою задачу (одну). Спочатку збережу запропонований план, потім додам твою."
+        "Напиши свій пункт (один). Спочатку збережу запропонований план, потім додам твій."
     )
-    # Persist proposed plan first so it isn't lost
-    tasks = context.user_data.pop("proposed_tasks", [])
-    await db.delete_tasks_for_date(today(), source="ai")
-    if tasks:
-        await db.add_tasks(today(), tasks, source="ai")
+    pkey = HORIZON[horizon]["key"]()
+    items = context.user_data.pop("proposed_tasks", [])
+    await db.delete_tasks_for_period(pkey, horizon=horizon, source="ai")
+    if items:
+        await db.add_tasks(pkey, items, source="ai", horizon=horizon)
     return PLAN_ADD_TASK
 
 
 async def plan_add_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await db.add_task(today(), update.message.text.strip(), source="user")
-    saved = await db.get_tasks(today())
+    horizon = _current_horizon(context)
+    pkey = HORIZON[horizon]["key"]()
+    await db.add_task(pkey, update.message.text.strip(), source="user", horizon=horizon)
+    saved = await db.get_tasks(pkey, horizon)
     await update.message.reply_text(
-        format_tasks_text(saved),
+        format_tasks_text(saved, horizon),
         parse_mode="HTML",
         reply_markup=keyboards.tasks_keyboard(saved),
     )
@@ -180,7 +308,11 @@ def plan_day_conversation() -> ConversationHandler:
     return ConversationHandler(
         entry_points=[
             CommandHandler("plan_day", plan_day_start),
+            CommandHandler("plan_week", plan_week_start),
+            CommandHandler("plan_month", plan_month_start),
             CallbackQueryHandler(plan_day_start, pattern="^cmd_plan_day$"),
+            CallbackQueryHandler(plan_week_start, pattern="^cmd_plan_week$"),
+            CallbackQueryHandler(plan_month_start, pattern="^cmd_plan_month$"),
         ],
         states={
             PLAN_REVIEW: [
@@ -194,29 +326,59 @@ def plan_day_conversation() -> ConversationHandler:
     )
 
 
-# ── /tasks + toggle ───────────────────────────────────────────────────────────
+# ── /tasks · /week · /month + toggle + /plan overview ─────────────────────────
 
-async def tasks_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    tasks = await db.get_tasks(today())
+async def _show_horizon(update: Update, context: ContextTypes.DEFAULT_TYPE, horizon: str) -> None:
+    pkey = HORIZON[horizon]["key"]()
+    tasks = await db.get_tasks(pkey, horizon)
     target = update.callback_query.message if update.callback_query else update.message
     if update.callback_query:
         await update.callback_query.answer()
     await target.reply_text(
-        format_tasks_text(tasks),
+        format_tasks_text(tasks, horizon),
         parse_mode="HTML",
         reply_markup=keyboards.tasks_keyboard(tasks) if tasks else None,
     )
 
 
+async def tasks_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _show_horizon(update, context, "day")
+
+
+async def week_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _show_horizon(update, context, "week")
+
+
+async def month_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _show_horizon(update, context, "month")
+
+
+async def plan_overview(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show all three horizons stacked: month → week → day."""
+    target = update.callback_query.message if update.callback_query else update.message
+    if update.callback_query:
+        await update.callback_query.answer()
+    parts = []
+    for horizon in ("month", "week", "day"):
+        pkey = HORIZON[horizon]["key"]()
+        tasks = await db.get_tasks(pkey, horizon)
+        parts.append(format_tasks_text(tasks, horizon))
+    await target.reply_text("\n\n".join(parts), parse_mode="HTML")
+
+
 async def task_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     task_id = int(query.data.split("_")[1])
+    task = await db.get_task(task_id)
     new_done = await db.toggle_task(task_id)
     await query.answer("✅ Виконано!" if new_done else "↩️ Знято")
-    tasks = await db.get_tasks(today())
+    if not task:
+        return
+    horizon = task.get("horizon", "day")
+    tasks = await db.get_tasks(task["period_key"], horizon)
     try:
         await query.edit_message_text(
-            format_tasks_text(tasks),
+            format_tasks_text(tasks, horizon),
             parse_mode="HTML",
             reply_markup=keyboards.tasks_keyboard(tasks),
         )
@@ -530,12 +692,15 @@ async def free_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     text = update.message.text.strip()
     _remember(context, "user", text)
 
-    tasks = await db.get_tasks(today())
     ctx = await db.build_context_snapshot()
+    day_tasks = await db.get_tasks(today(), "day")
+    week_tasks = await db.get_tasks(week_key(), "week")
+    month_tasks = await db.get_tasks(month_key(), "month")
 
-    current_tasks = "\n".join(
-        f"- {'[✅]' if t['done'] else '[ ]'} {t['title']}" for t in tasks
-    ) or "(на сьогодні задач немає)"
+    def _fmt(items, empty):
+        return "\n".join(
+            f"- {'[✅]' if t['done'] else '[ ]'} {t['title']}" for t in items
+        ) or empty
 
     content_plan = context.user_data.get("last_content_plan")
     if content_plan:
@@ -546,28 +711,37 @@ async def free_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     prompt = FREE_TEXT_TEMPLATE.format(
         dialog=_format_dialog(context),
-        current_tasks=current_tasks,
+        current_tasks=_fmt(day_tasks, "(на сьогодні задач немає)"),
+        week_tasks=_fmt(week_tasks, "(пріоритетів на тиждень немає)"),
+        month_tasks=_fmt(month_tasks, "(цілей на місяць немає)"),
         content_plan=content_plan,
         content_plan_status=content_plan_status,
         user_message=text,
     )
     answer = await ai_client.ask(prompt, ctx, bot=context.bot, chat_id=update.effective_chat.id)
 
-    if "[ЗАДАЧІ]" in answer:
-        block = answer.split("[ЗАДАЧІ]", 1)[1]
-        new_tasks = parse_task_lines(block)
-        await db.replace_tasks(today(), new_tasks)
-        saved = await db.get_tasks(today())
-        _remember(context, "assistant", "(оновив задачі на сьогодні)")
-        if saved:
-            await update.message.reply_text(
-                "✏️ " + format_tasks_text(saved),
-                parse_mode="HTML",
-                reply_markup=keyboards.tasks_keyboard(saved),
-            )
-        else:
-            await update.message.reply_text("🗑 Усі задачі на сьогодні видалено.")
-        return
+    # Plan-edit blocks for each horizon. Tag → (horizon, period_key, label).
+    horizon_blocks = [
+        ("[ЗАДАЧІ]", "day", today(), "задачі на сьогодні"),
+        ("[ТИЖДЕНЬ]", "week", week_key(), "пріоритети тижня"),
+        ("[МІСЯЦЬ]", "month", month_key(), "цілі місяця"),
+    ]
+    for tag, horizon, pkey, label in horizon_blocks:
+        if tag in answer:
+            block = answer.split(tag, 1)[1]
+            new_items = parse_task_lines(block)
+            await db.replace_tasks(pkey, new_items, horizon=horizon)
+            saved = await db.get_tasks(pkey, horizon)
+            _remember(context, "assistant", f"(оновив {label})")
+            if saved:
+                await update.message.reply_text(
+                    "✏️ " + format_tasks_text(saved, horizon),
+                    parse_mode="HTML",
+                    reply_markup=keyboards.tasks_keyboard(saved),
+                )
+            else:
+                await update.message.reply_text(f"🗑 Усі {label} видалено.")
+            return
 
     if "[КОНТЕНТ-ПЛАН]" in answer:
         plan_text = answer.split("[КОНТЕНТ-ПЛАН]", 1)[1].strip()
