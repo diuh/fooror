@@ -7,6 +7,8 @@ from telegram.constants import ChatAction
 from config import config
 from prompts.system import STATIC_PERSONA, build_context_block
 
+MODEL = "claude-opus-4-8"
+
 _client: anthropic.AsyncAnthropic | None = None
 
 
@@ -60,7 +62,7 @@ async def _generate(user_message: str, context_data: dict | None, max_tokens: in
 
     try:
         response = await get_client().messages.create(
-            model="claude-sonnet-4-5",
+            model=MODEL,
             max_tokens=max_tokens,
             system=system_blocks,
             messages=[{"role": "user", "content": user_message}],
