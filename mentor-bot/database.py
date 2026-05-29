@@ -1,22 +1,27 @@
 import json
 import os
 import aiosqlite
+import contextlib
 from datetime import datetime, date
 from typing import Any
 
 from config import config
 
 
-async def get_db() -> aiosqlite.Connection:
+@contextlib.asynccontextmanager
+async def get_db():
     os.makedirs(os.path.dirname(config.database_path), exist_ok=True)
     db = await aiosqlite.connect(config.database_path)
     db.row_factory = aiosqlite.Row
     await db.execute("PRAGMA foreign_keys = ON")
-    return db
+    try:
+        yield db
+    finally:
+        await db.close()
 
 
 async def init_db() -> None:
-    async with await get_db() as db:
+    async with get_db() as db:
         await db.executescript("""
             CREATE TABLE IF NOT EXISTS config (
                 key   TEXT PRIMARY KEY,
@@ -112,14 +117,14 @@ async def init_db() -> None:
 # ── Config ────────────────────────────────────────────────────────────────────
 
 async def get_config(key: str) -> str | None:
-    async with await get_db() as db:
+    async with get_db() as db:
         async with db.execute("SELECT value FROM config WHERE key = ?", (key,)) as cur:
             row = await cur.fetchone()
             return row["value"] if row else None
 
 
 async def set_config(key: str, value: str) -> None:
-    async with await get_db() as db:
+    async with get_db() as db:
         await db.execute(
             "INSERT OR REPLACE INTO config(key, value) VALUES (?, ?)", (key, value)
         )
@@ -131,7 +136,7 @@ async def set_config(key: str, value: str) -> None:
 async def add_income(amount: float, description: str, payment_date: str | None = None, lead_id: int | None = None) -> int:
     pd = payment_date or date.today().isoformat()
     month = pd[:7]
-    async with await get_db() as db:
+    async with get_db() as db:
         cur = await db.execute(
             "INSERT INTO income_log(lead_id, amount, payment_date, month, description) VALUES (?,?,?,?,?)",
             (lead_id, amount, pd, month, description),
@@ -142,7 +147,7 @@ async def add_income(amount: float, description: str, payment_date: str | None =
 
 async def get_month_income(month: str | None = None) -> float:
     m = month or date.today().strftime("%Y-%m")
-    async with await get_db() as db:
+    async with get_db() as db:
         async with db.execute(
             "SELECT COALESCE(SUM(amount),0) as total FROM income_log WHERE month = ?", (m,)
         ) as cur:
@@ -151,7 +156,7 @@ async def get_month_income(month: str | None = None) -> float:
 
 
 async def get_income_history(months: int = 6) -> list[dict]:
-    async with await get_db() as db:
+    async with get_db() as db:
         async with db.execute(
             """
             SELECT month, SUM(amount) as total, COUNT(*) as n_payments
@@ -166,7 +171,7 @@ async def get_income_history(months: int = 6) -> list[dict]:
 
 
 async def get_recent_income_entries(limit: int = 5) -> list[dict]:
-    async with await get_db() as db:
+    async with get_db() as db:
         async with db.execute(
             "SELECT * FROM income_log ORDER BY created_at DESC LIMIT ?", (limit,)
         ) as cur:
@@ -186,7 +191,7 @@ async def add_lead(
     next_action: str = "",
     next_action_date: str = "",
 ) -> int:
-    async with await get_db() as db:
+    async with get_db() as db:
         cur = await db.execute(
             """INSERT INTO leads
                (name, company, contact, project_type, estimated_value, source, notes, next_action, next_action_date)
@@ -198,7 +203,7 @@ async def add_lead(
 
 
 async def get_leads(status: str | None = None) -> list[dict]:
-    async with await get_db() as db:
+    async with get_db() as db:
         if status:
             async with db.execute(
                 "SELECT * FROM leads WHERE status = ? ORDER BY updated_at DESC", (status,)
@@ -212,7 +217,7 @@ async def get_leads(status: str | None = None) -> list[dict]:
 
 
 async def get_lead(lead_id: int) -> dict | None:
-    async with await get_db() as db:
+    async with get_db() as db:
         async with db.execute("SELECT * FROM leads WHERE id = ?", (lead_id,)) as cur:
             row = await cur.fetchone()
             return dict(row) if row else None
@@ -226,13 +231,13 @@ async def update_lead(lead_id: int, **fields: Any) -> None:
         fields["closed_at"] = datetime.now().isoformat()
     set_clause = ", ".join(f"{k} = ?" for k in fields)
     values = list(fields.values()) + [lead_id]
-    async with await get_db() as db:
+    async with get_db() as db:
         await db.execute(f"UPDATE leads SET {set_clause} WHERE id = ?", values)
         await db.commit()
 
 
 async def get_pipeline_summary() -> dict:
-    async with await get_db() as db:
+    async with get_db() as db:
         async with db.execute(
             """
             SELECT status,
@@ -249,7 +254,7 @@ async def get_pipeline_summary() -> dict:
 
 async def get_overdue_leads() -> list[dict]:
     today = date.today().isoformat()
-    async with await get_db() as db:
+    async with get_db() as db:
         async with db.execute(
             """SELECT * FROM leads
                WHERE next_action_date < ? AND next_action_date != ''
@@ -273,7 +278,7 @@ async def upsert_daily_log(
     mood_score: int | None = None,
     ai_response: str = "",
 ) -> None:
-    async with await get_db() as db:
+    async with get_db() as db:
         existing = await db.execute(
             "SELECT id FROM daily_logs WHERE log_date = ? AND log_type = ?",
             (log_date, log_type),
@@ -300,7 +305,7 @@ async def upsert_daily_log(
 
 
 async def get_daily_log(log_date: str, log_type: str) -> dict | None:
-    async with await get_db() as db:
+    async with get_db() as db:
         async with db.execute(
             "SELECT * FROM daily_logs WHERE log_date = ? AND log_type = ?",
             (log_date, log_type),
@@ -310,7 +315,7 @@ async def get_daily_log(log_date: str, log_type: str) -> dict | None:
 
 
 async def get_checkin_history(days: int = 7) -> list[dict]:
-    async with await get_db() as db:
+    async with get_db() as db:
         async with db.execute(
             "SELECT * FROM daily_logs ORDER BY log_date DESC, log_type DESC LIMIT ?",
             (days * 2,),
@@ -319,7 +324,7 @@ async def get_checkin_history(days: int = 7) -> list[dict]:
 
 
 async def get_streak() -> int:
-    async with await get_db() as db:
+    async with get_db() as db:
         async with db.execute(
             """SELECT DISTINCT log_date FROM daily_logs
                WHERE log_type = 'evening'
@@ -341,7 +346,7 @@ async def get_streak() -> int:
 # ── Content Ideas ─────────────────────────────────────────────────────────────
 
 async def add_content_idea(platform: str, title: str, body: str = "", publish_date: str = "") -> int:
-    async with await get_db() as db:
+    async with get_db() as db:
         cur = await db.execute(
             "INSERT INTO content_ideas(platform, title, body, publish_date) VALUES (?,?,?,?)",
             (platform, title, body, publish_date),
@@ -351,7 +356,7 @@ async def add_content_idea(platform: str, title: str, body: str = "", publish_da
 
 
 async def get_content_ideas(platform: str | None = None, status: str | None = None) -> list[dict]:
-    async with await get_db() as db:
+    async with get_db() as db:
         conditions = []
         params = []
         if platform:
@@ -379,7 +384,7 @@ async def add_proposal(
     proposal_text: str,
     lead_id: int | None = None,
 ) -> int:
-    async with await get_db() as db:
+    async with get_db() as db:
         cur = await db.execute(
             """INSERT INTO proposals
                (lead_id, project_type, scope_summary, price_low, price_high, timeline_weeks, proposal_text)
