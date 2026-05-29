@@ -33,6 +33,11 @@ def today() -> str:
     return date.today().isoformat()
 
 
+def is_weekend() -> bool:
+    # Monday=0 … Saturday=5, Sunday=6
+    return date.today().weekday() >= 5
+
+
 def parse_task_lines(text: str) -> list[str]:
     tasks: list[str] = []
     for line in text.splitlines():
@@ -462,6 +467,8 @@ async def midday_reminder_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     tasks = await db.get_tasks(today())
     if not tasks:
+        if is_weekend():
+            return  # don't nag to make a plan on weekends
         await context.bot.send_message(
             chat_id=int(chat_id),
             text="🕒 Полудень. План на сьогодні ще не складено — давай зробимо: /plan_day",

@@ -190,11 +190,13 @@ async def morning_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         parse_mode="HTML",
     )
 
-    # Auto-generate today's task plan if not already set, and show it
+    # Auto-generate today's task plan if not already set, and show it.
+    # On weekends we never auto-plan — the user makes a plan only if they
+    # explicitly ask via /plan_day. A manually-made weekend plan still shows.
     import keyboards
-    from handlers.tasks import generate_daily_tasks, format_tasks_text, today as today_str
+    from handlers.tasks import generate_daily_tasks, format_tasks_text, is_weekend, today as today_str
     existing = await db.get_tasks(today_str())
-    if not existing:
+    if not existing and not is_weekend():
         proposed = await generate_daily_tasks(ctx, bot=context.bot, chat_id=int(chat_id))
         if proposed:
             await db.add_tasks(today_str(), proposed, source="ai")
