@@ -197,7 +197,9 @@ async def morning_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     from handlers.tasks import generate_daily_tasks, format_tasks_text, is_weekend, today as today_str
     existing = await db.get_tasks(today_str())
     if not existing and not is_weekend():
-        proposed = await generate_daily_tasks(ctx, bot=context.bot, chat_id=int(chat_id))
+        user_data = context.application.user_data.get(int(chat_id), {})
+        content_plan = user_data.get("last_content_plan")
+        proposed = await generate_daily_tasks(ctx, bot=context.bot, chat_id=int(chat_id), content_plan=content_plan)
         if proposed:
             await db.add_tasks(today_str(), proposed, source="ai")
     tasks = await db.get_tasks(today_str())

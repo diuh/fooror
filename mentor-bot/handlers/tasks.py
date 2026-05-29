@@ -60,9 +60,18 @@ def parse_goal(text: str) -> float | None:
         return None
 
 
-async def generate_daily_tasks(ctx: dict, bot=None, chat_id=None) -> list[str]:
+async def generate_daily_tasks(
+    ctx: dict, bot=None, chat_id=None, content_plan: str | None = None
+) -> list[str]:
     from prompts.system import build_context_block
-    prompt = DAILY_PLAN_TEMPLATE.format(context_block=build_context_block(ctx))
+    if content_plan:
+        content_plan_block = f"\nКОНТЕНТ-ПЛАН НА ТИЖДЕНЬ (враховуй який пост запланований на сьогодні):\n{content_plan}\n"
+    else:
+        content_plan_block = ""
+    prompt = DAILY_PLAN_TEMPLATE.format(
+        context_block=build_context_block(ctx),
+        content_plan_block=content_plan_block,
+    )
     answer = await ai_client.ask(prompt, ctx, bot=bot, chat_id=chat_id)
     return parse_task_lines(answer)
 
@@ -89,7 +98,8 @@ async def plan_day_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         msg = update.message
     await msg.reply_text("⏳ Складаю план на сьогодні…")
     ctx = await db.build_context_snapshot()
-    tasks = await generate_daily_tasks(ctx, bot=msg.get_bot(), chat_id=msg.chat_id)
+    content_plan = context.user_data.get("last_content_plan")
+    tasks = await generate_daily_tasks(ctx, bot=msg.get_bot(), chat_id=msg.chat_id, content_plan=content_plan)
     if not tasks:
         await msg.reply_text("Не вдалось згенерувати план. Спробуй ще раз: /plan_day")
         return ConversationHandler.END
@@ -122,7 +132,8 @@ async def plan_regen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.callback_query.answer("Генерую новий варіант…")
     msg = update.callback_query.message
     ctx = await db.build_context_snapshot()
-    tasks = await generate_daily_tasks(ctx, bot=msg.get_bot(), chat_id=msg.chat_id)
+    content_plan = context.user_data.get("last_content_plan")
+    tasks = await generate_daily_tasks(ctx, bot=msg.get_bot(), chat_id=msg.chat_id, content_plan=content_plan)
     if not tasks:
         await msg.reply_text("Не вдалось. Спробуй /plan_day")
         return ConversationHandler.END
