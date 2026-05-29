@@ -4,8 +4,16 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 def main_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [
+            InlineKeyboardButton("📋 План дня", callback_data="cmd_plan_day"),
+            InlineKeyboardButton("✅ Задачі", callback_data="cmd_tasks"),
+        ],
+        [
             InlineKeyboardButton("💰 Дохід", callback_data="cmd_income"),
             InlineKeyboardButton("🔗 Ліди", callback_data="cmd_leads"),
+        ],
+        [
+            InlineKeyboardButton("🎯 Ціль місяця", callback_data="cmd_setgoal"),
+            InlineKeyboardButton("📡 Канали", callback_data="cmd_channels"),
         ],
         [
             InlineKeyboardButton("📄 Пропозиція", callback_data="cmd_proposal"),
@@ -85,3 +93,33 @@ def skip_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[
         InlineKeyboardButton("Пропустити", callback_data="skip"),
     ]])
+
+
+def tasks_keyboard(tasks: list[dict]) -> InlineKeyboardMarkup:
+    """One button per task that toggles its done state, plus a refresh row."""
+    rows = []
+    for t in tasks:
+        mark = "✅" if t["done"] else "⬜️"
+        title = t["title"]
+        if len(title) > 40:
+            title = title[:39] + "…"
+        rows.append([InlineKeyboardButton(f"{mark} {title}", callback_data=f"task_{t['id']}")])
+    return InlineKeyboardMarkup(rows) if rows else InlineKeyboardMarkup([])
+
+
+def plan_confirm_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✅ Прийняти план", callback_data="plan_accept"),
+            InlineKeyboardButton("🔄 Перегенерувати", callback_data="plan_regen"),
+        ],
+        [InlineKeyboardButton("✏️ Додати свою задачу", callback_data="plan_add_own")],
+    ])
+
+
+def goal_confirm_keyboard(suggested: float | None) -> InlineKeyboardMarkup:
+    rows = []
+    if suggested:
+        rows.append([InlineKeyboardButton(f"✅ Прийняти ${suggested:,.0f}", callback_data=f"goal_accept_{int(suggested)}")])
+    rows.append([InlineKeyboardButton("✏️ Ввести свою цифру", callback_data="goal_manual")])
+    return InlineKeyboardMarkup(rows)

@@ -34,6 +34,15 @@ def build_context_block(ctx: dict) -> str:
     last = ctx.get("last_payment")
     last_str = f"{last['payment_date']} — {last['description']} (${last['amount']:,.0f})" if last else "немає"
 
+    tasks_total = ctx.get("tasks_total", 0)
+    tasks_done = ctx.get("tasks_done", 0)
+    if tasks_total:
+        pending = [t["title"] for t in ctx.get("tasks_today", []) if not t["done"]]
+        pending_str = "; ".join(pending) if pending else "усі виконані ✅"
+        tasks_str = f"{tasks_done}/{tasks_total} виконано. Залишилось: {pending_str}"
+    else:
+        tasks_str = "план на сьогодні ще не складено"
+
     return f"""ПОТОЧНИЙ КОНТЕКСТ (станом на {ctx['today']}):
 
 ДОХІД {ctx['month']}:
@@ -48,6 +57,9 @@ PIPELINE:
 - Пропозиція надіслана: {p('proposal')}
 - Закриті цього місяця: {p('closed')}
 - Відмови: {p('rejected')}
+
+ЗАДАЧІ НА СЬОГОДНІ:
+- {tasks_str}
 
 АКТИВНІСТЬ:
 - Прострочені follow-up: {overdue_str}

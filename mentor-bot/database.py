@@ -98,9 +98,30 @@ async def init_db() -> None:
                 updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
             );
 
+            CREATE TABLE IF NOT EXISTS tasks (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_date  TEXT NOT NULL,
+                title      TEXT NOT NULL,
+                done       INTEGER NOT NULL DEFAULT 0,
+                source     TEXT NOT NULL DEFAULT 'ai'
+                           CHECK(source IN ('ai','user')),
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                done_at    TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS monthly_plans (
+                month      TEXT PRIMARY KEY,
+                goal       REAL,
+                rationale  TEXT,
+                survey     TEXT,
+                analysis   TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
             CREATE INDEX IF NOT EXISTS idx_leads_status    ON leads(status);
             CREATE INDEX IF NOT EXISTS idx_income_month    ON income_log(month);
             CREATE INDEX IF NOT EXISTS idx_daily_logs_date ON daily_logs(log_date, log_type);
+            CREATE INDEX IF NOT EXISTS idx_tasks_date      ON tasks(task_date);
         """)
 
         await db.execute(
@@ -395,6 +416,127 @@ async def add_proposal(
         return cur.lastrowid
 
 
+# ── Tasks ─────────────────────────────────────────────────────────────────────
+
+async def add_task(task_date: str, title: str, source: str = "ai") -> int:
+    async with get_db() as db:
+        cur = await db.execute(
+            "INSERT INTO tasks(task_date, title, source) VALUES (?,?,?)",
+            (task_date, title, source),
+        )
+        await db.commit()
+        return cur.lastrowid
+
+
+async def add_tasks(task_date: str, titles: list[str], source: str = "ai") -> None:
+    async with get_db() as db:
+        await db.executemany(
+            "INSERT INTO tasks(task_date, title, source) VALUES (?,?,?)",
+            [(task_date, t, source) for t in titles],
+        )
+        await db.commit()
+
+
+async def get_tasks(task_date: str) -> list[dict]:
+    async with get_db() as db:
+        async with db.execute(
+            "SELECT * FROM tasks WHERE task_date = ? ORDER BY id", (task_date,)
+        ) as cur:
+            return [dict(r) for r in await cur.fetchall()]
+
+
+async def get_pending_tasks(task_date: str) -> list[dict]:
+    async with get_db() as db:
+        async with db.execute(
+            "SELECT * FROM tasks WHERE task_date = ? AND done = 0 ORDER BY id", (task_date,)
+        ) as cur:
+            return [dict(r) for r in await cur.fetchall()]
+
+
+async def get_task(task_id: int) -> dict | None:
+    async with get_db() as db:
+        async with db.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)) as cur:
+            row = await cur.fetchone()
+            return dict(row) if row else None
+
+
+async def toggle_task(task_id: int) -> bool:
+    """Flip a task's done state. Returns the new done state."""
+    async with get_db() as db:
+        async with db.execute("SELECT done FROM tasks WHERE id = ?", (task_id,)) as cur:
+            row = await cur.fetchone()
+            if not row:
+                return False
+        new_done = 0 if row["done"] else 1
+        done_at = datetime.now().isoformat() if new_done else None
+        await db.execute(
+            "UPDATE tasks SET done = ?, done_at = ? WHERE id = ?",
+            (new_done, done_at, task_id),
+        )
+        await db.commit()
+        return bool(new_done)
+
+
+async def delete_tasks_for_date(task_date: str, source: str | None = None) -> None:
+    async with get_db() as db:
+        if source:
+            await db.execute(
+                "DELETE FROM tasks WHERE task_date = ? AND source = ?", (task_date, source)
+            )
+        else:
+            await db.execute("DELETE FROM tasks WHERE task_date = ?", (task_date,))
+        await db.commit()
+
+
+async def delete_task(task_id: int) -> None:
+    async with get_db() as db:
+        await db.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+        await db.commit()
+
+
+async def get_month_task_stats(month: str) -> dict:
+    """Completion stats for all tasks in a YYYY-MM month."""
+    async with get_db() as db:
+        async with db.execute(
+            """SELECT COUNT(*) as total, COALESCE(SUM(done),0) as done
+               FROM tasks WHERE substr(task_date,1,7) = ?""",
+            (month,),
+        ) as cur:
+            row = await cur.fetchone()
+            return {"total": row["total"], "done": row["done"]}
+
+
+# ── Monthly Plans ─────────────────────────────────────────────────────────────
+
+async def save_monthly_plan(month: str, goal: float, rationale: str = "", survey: str = "") -> None:
+    async with get_db() as db:
+        await db.execute(
+            """INSERT INTO monthly_plans(month, goal, rationale, survey)
+               VALUES (?,?,?,?)
+               ON CONFLICT(month) DO UPDATE SET
+                 goal=excluded.goal, rationale=excluded.rationale, survey=excluded.survey""",
+            (month, goal, rationale, survey),
+        )
+        await db.commit()
+
+
+async def save_month_analysis(month: str, analysis: str) -> None:
+    async with get_db() as db:
+        await db.execute(
+            """INSERT INTO monthly_plans(month, analysis) VALUES (?, ?)
+               ON CONFLICT(month) DO UPDATE SET analysis=excluded.analysis""",
+            (month, analysis),
+        )
+        await db.commit()
+
+
+async def get_monthly_plan(month: str) -> dict | None:
+    async with get_db() as db:
+        async with db.execute("SELECT * FROM monthly_plans WHERE month = ?", (month,)) as cur:
+            row = await cur.fetchone()
+            return dict(row) if row else None
+
+
 # ── Context Snapshot ──────────────────────────────────────────────────────────
 
 async def build_context_snapshot() -> dict:
@@ -420,6 +562,9 @@ async def build_context_snapshot() -> dict:
     recent_income = await get_recent_income_entries(1)
     last_payment = recent_income[0] if recent_income else None
 
+    tasks_today = await get_tasks(today.isoformat())
+    tasks_done = sum(1 for t in tasks_today if t["done"])
+
     return {
         "today": today.isoformat(),
         "month": month,
@@ -434,4 +579,7 @@ async def build_context_snapshot() -> dict:
         "morning_log": morning_log,
         "evening_log": evening_log,
         "last_payment": last_payment,
+        "tasks_today": tasks_today,
+        "tasks_done": tasks_done,
+        "tasks_total": len(tasks_today),
     }

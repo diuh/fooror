@@ -186,9 +186,26 @@ async def morning_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     ai_msg = await ai_client.ask(prompt, ctx, bot=context.bot, chat_id=int(chat_id))
     await context.bot.send_message(
         chat_id=int(chat_id),
-        text=f"🌅 <b>Доброго ранку!</b>\n\n{ai_msg}\n\nВідправ /morning щоб зробити check-in.",
+        text=f"🌅 <b>Доброго ранку!</b>\n\n{ai_msg}",
         parse_mode="HTML",
     )
+
+    # Auto-generate today's task plan if not already set, and show it
+    import keyboards
+    from handlers.tasks import generate_daily_tasks, format_tasks_text, today as today_str
+    existing = await db.get_tasks(today_str())
+    if not existing:
+        proposed = await generate_daily_tasks(ctx, bot=context.bot, chat_id=int(chat_id))
+        if proposed:
+            await db.add_tasks(today_str(), proposed, source="ai")
+    tasks = await db.get_tasks(today_str())
+    if tasks:
+        await context.bot.send_message(
+            chat_id=int(chat_id),
+            text=format_tasks_text(tasks),
+            parse_mode="HTML",
+            reply_markup=keyboards.tasks_keyboard(tasks),
+        )
 
 
 async def evening_job(context: ContextTypes.DEFAULT_TYPE) -> None:

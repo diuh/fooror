@@ -52,6 +52,14 @@ from handlers.content import (
     post_idea_conversation,
     weekly_plan,
 )
+from handlers.tasks import (
+    channels_conversation,
+    month_review,
+    plan_day_conversation,
+    setgoal_conversation,
+    task_toggle,
+    tasks_cmd,
+)
 
 logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -91,6 +99,11 @@ async def post_init(application: Application) -> None:
         BotCommand("status", "Поточний статус"),
         BotCommand("morning", "Ранковий check-in"),
         BotCommand("evening", "Вечірній review"),
+        BotCommand("plan_day", "Скласти план задач на день"),
+        BotCommand("tasks", "Задачі на сьогодні"),
+        BotCommand("setgoal", "Поставити ціль на місяць"),
+        BotCommand("month_review", "Аналіз місяця"),
+        BotCommand("channels", "Підбір каналів залучення"),
         BotCommand("income", "Дохід місяця"),
         BotCommand("income_add", "Додати оплату"),
         BotCommand("income_history", "Історія доходів"),
@@ -139,6 +152,9 @@ def main() -> None:
         outreach_conversation(),
         ask_conversation(),
         post_idea_conversation(),
+        plan_day_conversation(),
+        setgoal_conversation(),
+        channels_conversation(),
     ]:
         app.add_handler(conv)
 
@@ -162,6 +178,8 @@ def main() -> None:
     app.add_handler(CommandHandler("content_list", content_list))
     app.add_handler(CommandHandler("weekly_plan", weekly_plan))
     app.add_handler(CommandHandler("brand", brand))
+    app.add_handler(CommandHandler("tasks", tasks_cmd))
+    app.add_handler(CommandHandler("month_review", month_review))
 
     # Dynamic commands like /lead_update_5 arrive as messages. CommandHandler
     # only matches static command names, so we match the pattern with a regex
@@ -174,6 +192,8 @@ def main() -> None:
     )
 
     app.add_handler(CallbackQueryHandler(lead_status_callback, pattern=r"^lstatus_"))
+    app.add_handler(CallbackQueryHandler(task_toggle, pattern=r"^task_\d+$"))
+    app.add_handler(CallbackQueryHandler(tasks_cmd, pattern=r"^cmd_tasks$"))
     app.add_handler(CallbackQueryHandler(menu_callback, pattern=r"^(cmd_|cancel)"))
 
     register_jobs(app)

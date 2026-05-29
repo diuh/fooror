@@ -8,6 +8,7 @@ KYIV_TZ = pytz.timezone("Europe/Kyiv")
 
 def register_jobs(app: Application) -> None:
     from handlers.checkin import morning_job, evening_job
+    from handlers.tasks import midday_reminder_job, month_end_job
 
     app.job_queue.run_daily(
         callback=morning_job,
@@ -15,9 +16,19 @@ def register_jobs(app: Application) -> None:
         name="morning_checkin",
     )
     app.job_queue.run_daily(
+        callback=midday_reminder_job,
+        time=time(15, 0, tzinfo=KYIV_TZ),
+        name="midday_reminder",
+    )
+    app.job_queue.run_daily(
         callback=evening_job,
         time=time(20, 0, tzinfo=KYIV_TZ),
         name="evening_checkin",
+    )
+    app.job_queue.run_daily(
+        callback=month_end_job,
+        time=time(19, 0, tzinfo=KYIV_TZ),
+        name="month_end_review",
     )
     app.job_queue.run_daily(
         callback=weekly_content_reminder,
