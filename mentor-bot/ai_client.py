@@ -7,7 +7,10 @@ from telegram.constants import ChatAction
 from config import config
 from prompts.system import STATIC_PERSONA, build_context_block
 
-MODEL = "claude-opus-4-8"
+# Sonnet for short, frequent tasks (check-ins, reminders, quick questions);
+# Opus for heavy generations (proposals, monthly analysis, channels, goal-setting).
+MODEL_FAST = "claude-sonnet-4-6"
+MODEL_SMART = "claude-opus-4-8"
 
 _client: anthropic.AsyncAnthropic | None = None
 
@@ -47,7 +50,7 @@ async def _typing(bot, chat_id):
             await task
 
 
-async def _generate(user_message: str, context_data: dict | None, max_tokens: int) -> str:
+async def _generate(user_message: str, context_data: dict | None, max_tokens: int, model: str) -> str:
     system_blocks: list[dict] = [
         {
             "type": "text",
@@ -62,7 +65,7 @@ async def _generate(user_message: str, context_data: dict | None, max_tokens: in
 
     try:
         response = await get_client().messages.create(
-            model=MODEL,
+            model=model,
             max_tokens=max_tokens,
             system=system_blocks,
             messages=[{"role": "user", "content": user_message}],
@@ -80,7 +83,7 @@ async def ask(
     chat_id=None,
 ) -> str:
     async with _typing(bot, chat_id):
-        return await _generate(user_message, context_data, max_tokens=1024)
+        return await _generate(user_message, context_data, max_tokens=1024, model=MODEL_FAST)
 
 
 async def ask_long(
@@ -91,4 +94,4 @@ async def ask_long(
     chat_id=None,
 ) -> str:
     async with _typing(bot, chat_id):
-        return await _generate(user_message, context_data, max_tokens=2048)
+        return await _generate(user_message, context_data, max_tokens=2048, model=MODEL_SMART)
