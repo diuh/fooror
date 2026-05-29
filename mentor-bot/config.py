@@ -12,6 +12,12 @@ class Config:
     allowed_chat_id: int | None
     database_path: str
 
+    @property
+    def persistence_path(self) -> str:
+        """Pickle file for PTB persistence, kept next to the DB so it lives on
+        the same Railway Volume and survives restarts/redeploys."""
+        return os.path.join(os.path.dirname(self.database_path) or ".", "bot_state.pkl")
+
     @classmethod
     def from_env(cls) -> "Config":
         raw_id = os.environ.get("ALLOWED_CHAT_ID")

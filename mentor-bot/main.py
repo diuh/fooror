@@ -8,6 +8,7 @@ from telegram.ext import (
     CommandHandler,
     ContextTypes,
     MessageHandler,
+    PicklePersistence,
     TypeHandler,
     filters,
 )
@@ -134,9 +135,19 @@ async def post_init(application: Application) -> None:
 
 
 def main() -> None:
+    # Persist user_data/chat_data/bot_data (conversation memory, last content
+    # plan, etc.) to the Volume so it survives restarts and redeploys. Flushed
+    # every 30s and on graceful shutdown.
+    import os
+    os.makedirs(os.path.dirname(config.persistence_path) or ".", exist_ok=True)
+    persistence = PicklePersistence(
+        filepath=config.persistence_path,
+        update_interval=30,
+    )
     app = (
         Application.builder()
         .token(config.telegram_token)
+        .persistence(persistence)
         .post_init(post_init)
         .build()
     )
