@@ -54,6 +54,7 @@ from handlers.content import (
 )
 from handlers.tasks import (
     channels_conversation,
+    free_text_handler,
     month_review,
     plan_day_conversation,
     setgoal_conversation,
@@ -195,6 +196,14 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(task_toggle, pattern=r"^task_\d+$"))
     app.add_handler(CallbackQueryHandler(tasks_cmd, pattern=r"^cmd_tasks$"))
     app.add_handler(CallbackQueryHandler(menu_callback, pattern=r"^(cmd_|cancel)"))
+
+    # Lowest-priority catch-all: free-text not consumed by a command or an
+    # active conversation is treated as a plan edit (or a question to the
+    # mentor when no tasks exist for today). Must be registered last so all
+    # ConversationHandlers and CommandHandlers get first claim on the message.
+    app.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND, free_text_handler)
+    )
 
     register_jobs(app)
 

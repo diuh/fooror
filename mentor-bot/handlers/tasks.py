@@ -20,6 +20,7 @@ from prompts.templates import (
     DAILY_PLAN_TEMPLATE,
     MONTH_ANALYSIS_TEMPLATE,
     MONTHLY_GOAL_TEMPLATE,
+    PLAN_EDIT_TEMPLATE,
 )
 
 # State ranges (kept distinct per feature for clarity)
@@ -482,6 +483,50 @@ async def midday_reminder_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         parse_mode="HTML",
         reply_markup=keyboards.tasks_keyboard(tasks),
     )
+
+
+async def free_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Global fallback for free-text messages outside active conversations.
+
+    If today's tasks exist, interprets the message as a potential plan edit.
+    Otherwise forwards it to the AI mentor as a general question.
+    """
+    text = update.message.text.strip()
+    tasks = await db.get_tasks(today())
+    ctx = await db.build_context_snapshot()
+
+    if not tasks:
+        answer = await ai_client.ask(text, ctx, bot=context.bot, chat_id=update.effective_chat.id)
+        for part in split_message(answer):
+            await update.message.reply_text(part)
+        return
+
+    task_lines = "\n".join(
+        f"{i}. {'[✅]' if t['done'] else '[ ]'} {t['title']}"
+        for i, t in enumerate(tasks, 1)
+    )
+    prompt = PLAN_EDIT_TEMPLATE.format(
+        current_tasks=task_lines,
+        user_message=text,
+    )
+    answer = await ai_client.ask(prompt, ctx, bot=context.bot, chat_id=update.effective_chat.id)
+
+    if "ОНОВЛЕНИЙ ПЛАН:" in answer:
+        plan_part = answer.split("ОНОВЛЕНИЙ ПЛАН:", 1)[1]
+        new_tasks = parse_task_lines(plan_part)
+        if new_tasks:
+            await db.delete_tasks_for_date(today())
+            await db.add_tasks(today(), new_tasks, source="ai")
+            saved = await db.get_tasks(today())
+            await update.message.reply_text(
+                "✏️ " + format_tasks_text(saved),
+                parse_mode="HTML",
+                reply_markup=keyboards.tasks_keyboard(saved),
+            )
+            return
+
+    for part in split_message(answer):
+        await update.message.reply_text(part)
 
 
 async def month_end_job(context: ContextTypes.DEFAULT_TYPE) -> None:
