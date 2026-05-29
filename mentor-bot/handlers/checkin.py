@@ -48,7 +48,7 @@ async def morning_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         time="ранок",
         context_block=f"Прогрес: {bar}{overdue_note}",
     )
-    ai_msg = await ai_client.ask(prompt, ctx)
+    ai_msg = await ai_client.ask(prompt, ctx, bot=context.bot, chat_id=update.effective_chat.id)
     full_msg = f"🌅 <b>Ранковий check-in</b>\n\n{ai_msg}\n\nЩо плануєш зробити сьогодні?"
     await _send_or_reply(update, full_msg, parse_mode="HTML")
     return MORNING_PLAN
@@ -67,6 +67,7 @@ async def morning_blocker(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     ai_response = await ai_client.ask(
         f"Планує сьогодні: {plan}\nМожливий блокер: {blocker}\n\nДай коротку фокус-рекомендацію на день.",
         ctx,
+        bot=context.bot, chat_id=update.effective_chat.id,
     )
     await db.upsert_daily_log(
         log_date=today(),
@@ -92,7 +93,7 @@ async def evening_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     prompt = EVENING_TEMPLATE.format(
         context_block=f"Прогрес місяця: {bar}",
     )
-    ai_msg = await ai_client.ask(prompt, ctx)
+    ai_msg = await ai_client.ask(prompt, ctx, bot=context.bot, chat_id=update.effective_chat.id)
     full_msg = f"🌆 <b>Вечірній check-in</b>\n\n{ai_msg}\n\nЩо вдалось зробити сьогодні?"
     await _send_or_reply(update, full_msg, parse_mode="HTML")
     return EVENING_REVIEW
@@ -142,6 +143,7 @@ async def evening_mood(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     ai_response = await ai_client.ask(
         f"Підсумок дня:\n- Що зробив: {review}\n- Contacted: {leads_n} лідів, {proposals_n} пропозицій\n- Настрій: {mood}/5\n\nДай підсумок дня і одну пораду на завтра.",
         ctx,
+        bot=context.bot, chat_id=query.message.chat_id,
     )
     await db.upsert_daily_log(
         log_date=today(),
@@ -181,7 +183,7 @@ async def morning_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         time="ранок",
         context_block=f"Прогрес: {bar}{overdue_note}",
     )
-    ai_msg = await ai_client.ask(prompt, ctx)
+    ai_msg = await ai_client.ask(prompt, ctx, bot=context.bot, chat_id=int(chat_id))
     await context.bot.send_message(
         chat_id=int(chat_id),
         text=f"🌅 <b>Доброго ранку!</b>\n\n{ai_msg}\n\nВідправ /morning щоб зробити check-in.",
@@ -198,6 +200,7 @@ async def evening_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     ai_msg = await ai_client.ask(
         f"Нагадай про вечірній check-in. Прогрес: {bar}. Скажи одну фразу.",
         ctx,
+        bot=context.bot, chat_id=int(chat_id),
     )
     await context.bot.send_message(
         chat_id=int(chat_id),

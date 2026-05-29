@@ -68,7 +68,7 @@ async def _generate_post(update_or_query, context, extra: str) -> int:
         platform=platform,
         extra_context=f"Додатковий контекст: {extra}" if extra else "",
     )
-    answer = await ai_client.ask_long(prompt, ctx)
+    answer = await ai_client.ask_long(prompt, ctx, bot=msg.get_bot(), chat_id=msg.chat_id)
 
     title_line = answer.split("\n")[0][:80]
     await db.add_content_idea(platform=platform, title=title_line, body=answer)
@@ -109,7 +109,7 @@ async def weekly_plan(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     prompt = WEEKLY_CONTENT_TEMPLATE.format(
         context_block=build_context_block(ctx),
     )
-    answer = await ai_client.ask_long(prompt, ctx)
+    answer = await ai_client.ask_long(prompt, ctx, bot=context.bot, chat_id=update.effective_chat.id)
     for part in split_message(answer):
         await update.message.reply_text(part)
 
@@ -120,6 +120,6 @@ async def brand(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     ctx = await db.build_context_snapshot()
     from prompts.system import build_context_block
     prompt = BRAND_TEMPLATE.format(context_block=build_context_block(ctx))
-    answer = await ai_client.ask_long(prompt, ctx)
+    answer = await ai_client.ask_long(prompt, ctx, bot=context.bot, chat_id=update.effective_chat.id)
     for part in split_message(answer):
         await update.message.reply_text(part)

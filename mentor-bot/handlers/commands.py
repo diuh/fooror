@@ -472,7 +472,7 @@ async def ask_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         if context.args:
             question = " ".join(context.args)
             ctx = await db.build_context_snapshot()
-            answer = await ai_client.ask(question, ctx)
+            answer = await ai_client.ask(question, ctx, bot=context.bot, chat_id=update.effective_chat.id)
             for part in split_message(answer):
                 await update.message.reply_text(part)
             return ConversationHandler.END
@@ -482,7 +482,7 @@ async def ask_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 async def ask_question(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     ctx = await db.build_context_snapshot()
-    answer = await ai_client.ask(update.message.text, ctx)
+    answer = await ai_client.ask(update.message.text, ctx, bot=context.bot, chat_id=update.effective_chat.id)
     for part in split_message(answer):
         await update.message.reply_text(part)
     return ConversationHandler.END
@@ -517,7 +517,7 @@ async def review_week(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         context_block="(дивись у системному контексті)",
         checkin_summary=checkin_summary,
     )
-    answer = await ai_client.ask_long(prompt, ctx)
+    answer = await ai_client.ask_long(prompt, ctx, bot=context.bot, chat_id=update.effective_chat.id)
     for part in split_message(answer):
         await update.message.reply_text(part)
 
@@ -528,7 +528,7 @@ async def motivate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     from prompts.templates import MOTIVATE_TEMPLATE
     ctx = await db.build_context_snapshot()
     prompt = MOTIVATE_TEMPLATE.format(context_block="(дивись у системному контексті)")
-    answer = await ai_client.ask(prompt, ctx)
+    answer = await ai_client.ask(prompt, ctx, bot=context.bot, chat_id=update.effective_chat.id)
     await update.message.reply_text(answer)
 
 

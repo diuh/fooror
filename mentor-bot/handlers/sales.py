@@ -113,7 +113,7 @@ async def _generate_proposal(update_or_query, context, budget: str) -> int:
         budget=budget,
         price_ranges=PRICE_RANGES,
     )
-    proposal_text = await ai_client.ask_long(prompt, ctx)
+    proposal_text = await ai_client.ask_long(prompt, ctx, bot=msg.get_bot(), chat_id=msg.chat_id)
     context.user_data["last_proposal"] = {
         "project_type": proj_type,
         "scope": scope,
@@ -218,7 +218,7 @@ async def price_desc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         description=description,
         price_ranges=PRICE_RANGES,
     )
-    answer = await ai_client.ask(prompt, ctx)
+    answer = await ai_client.ask(prompt, ctx, bot=context.bot, chat_id=update.effective_chat.id)
     for part in split_message(answer):
         await update.message.reply_text(part)
     return ConversationHandler.END
@@ -276,7 +276,7 @@ async def outreach_platform(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         platform=platform,
         language="українська",
     )
-    answer = await ai_client.ask(prompt, ctx)
+    answer = await ai_client.ask(prompt, ctx, bot=context.bot, chat_id=update.callback_query.message.chat_id)
     await update.callback_query.message.reply_text(answer)
     return ConversationHandler.END
 
@@ -311,7 +311,7 @@ async def objection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         objection=obj_text,
         context="веб-дизайн/розробка сайтів",
     )
-    answer = await ai_client.ask(prompt, ctx)
+    answer = await ai_client.ask(prompt, ctx, bot=context.bot, chat_id=update.effective_chat.id)
     await update.message.reply_text(answer)
 
 
@@ -323,5 +323,6 @@ async def pitch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     answer = await ai_client.ask(
         f"Напиши 3-речення elevator pitch для проекту: {proj}. Мова: українська.",
         ctx,
+        bot=context.bot, chat_id=update.effective_chat.id,
     )
     await update.message.reply_text(answer)
