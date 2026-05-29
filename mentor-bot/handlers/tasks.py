@@ -18,9 +18,9 @@ from formatters import income_bar, split_message
 from prompts.templates import (
     CHANNELS_TEMPLATE,
     DAILY_PLAN_TEMPLATE,
+    FREE_TEXT_TEMPLATE,
     MONTH_ANALYSIS_TEMPLATE,
     MONTHLY_GOAL_TEMPLATE,
-    PLAN_EDIT_TEMPLATE,
 )
 
 # State ranges (kept distinct per feature for clarity)
@@ -492,39 +492,63 @@ async def midday_reminder_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
+def _remember(context: ContextTypes.DEFAULT_TYPE, role: str, text: str) -> None:
+    """Keep a short rolling memory of the last few free-text turns so the
+    mentor doesn't lose the thread between messages."""
+    dialog = context.user_data.setdefault("dialog", [])
+    dialog.append({"role": role, "text": text})
+    del dialog[:-8]  # keep only the last 8 turns
+
+
+def _format_dialog(context: ContextTypes.DEFAULT_TYPE) -> str:
+    dialog = context.user_data.get("dialog", [])
+    if not dialog:
+        return "(порожньо)"
+    label = {"user": "Користувач", "assistant": "Ментор"}
+    return "\n".join(f"{label[d['role']]}: {d['text']}" for d in dialog)
+
+
 async def free_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Global fallback for free-text messages outside active conversations.
 
-    If today's tasks exist, interprets the message as a potential plan edit.
-    Otherwise forwards it to the AI mentor as a general question.
+    Routes the message with conversation context: it can edit today's task
+    list, revise the content plan, or just answer as a mentor — and it keeps
+    these three things distinct so a content discussion never overwrites the
+    day's tasks (and completed tasks are never silently reset).
     """
     text = update.message.text.strip()
+    _remember(context, "user", text)
+
     tasks = await db.get_tasks(today())
     ctx = await db.build_context_snapshot()
 
-    if not tasks:
-        answer = await ai_client.ask(text, ctx, bot=context.bot, chat_id=update.effective_chat.id)
-        for part in split_message(answer):
-            await update.message.reply_text(part)
-        return
+    current_tasks = "\n".join(
+        f"- {'[✅]' if t['done'] else '[ ]'} {t['title']}" for t in tasks
+    ) or "(на сьогодні задач немає)"
 
-    task_lines = "\n".join(
-        f"{i}. {'[✅]' if t['done'] else '[ ]'} {t['title']}"
-        for i, t in enumerate(tasks, 1)
-    )
-    prompt = PLAN_EDIT_TEMPLATE.format(
-        current_tasks=task_lines,
+    content_plan = context.user_data.get("last_content_plan")
+    if content_plan:
+        content_plan_status = ""
+    else:
+        content_plan = "(ще не складено)"
+        content_plan_status = " — відсутній"
+
+    prompt = FREE_TEXT_TEMPLATE.format(
+        dialog=_format_dialog(context),
+        current_tasks=current_tasks,
+        content_plan=content_plan,
+        content_plan_status=content_plan_status,
         user_message=text,
     )
     answer = await ai_client.ask(prompt, ctx, bot=context.bot, chat_id=update.effective_chat.id)
 
-    if "ОНОВЛЕНИЙ ПЛАН:" in answer:
-        plan_part = answer.split("ОНОВЛЕНИЙ ПЛАН:", 1)[1]
-        new_tasks = parse_task_lines(plan_part)
+    if "[ЗАДАЧІ]" in answer:
+        block = answer.split("[ЗАДАЧІ]", 1)[1]
+        new_tasks = parse_task_lines(block)
         if new_tasks:
-            await db.delete_tasks_for_date(today())
-            await db.add_tasks(today(), new_tasks, source="ai")
+            await db.replace_tasks(today(), new_tasks)
             saved = await db.get_tasks(today())
+            _remember(context, "assistant", "(оновив задачі на сьогодні)")
             await update.message.reply_text(
                 "✏️ " + format_tasks_text(saved),
                 parse_mode="HTML",
@@ -532,6 +556,16 @@ async def free_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             )
             return
 
+    if "[КОНТЕНТ-ПЛАН]" in answer:
+        plan_text = answer.split("[КОНТЕНТ-ПЛАН]", 1)[1].strip()
+        context.user_data["last_content_plan"] = plan_text
+        _remember(context, "assistant", "(оновив контент-план)")
+        await update.message.reply_text("✏️ <b>Оновлений контент-план:</b>", parse_mode="HTML")
+        for part in split_message(plan_text):
+            await update.message.reply_text(part)
+        return
+
+    _remember(context, "assistant", answer)
     for part in split_message(answer):
         await update.message.reply_text(part)
 

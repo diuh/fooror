@@ -196,6 +196,9 @@ async def _generate_weekly(msg, context) -> int:
         context_block=build_context_block(ctx),
     )
     answer = await ai_client.ask_long(prompt, ctx, bot=msg.get_bot(), chat_id=msg.chat_id)
+    # Remember the plan so follow-up free-text messages revise THIS plan
+    # instead of being misread as edits to today's task list.
+    context.user_data["last_content_plan"] = answer
     for part in split_message(answer):
         await msg.reply_text(part)
     return ConversationHandler.END

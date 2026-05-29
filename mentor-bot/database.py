@@ -488,6 +488,28 @@ async def delete_tasks_for_date(task_date: str, source: str | None = None) -> No
         await db.commit()
 
 
+async def replace_tasks(task_date: str, titles: list[str]) -> None:
+    """Replace the day's task list, preserving the done-state of any task whose
+    title is unchanged (case-insensitive). Used when editing today's plan via
+    free text so already-completed tasks are not silently reset."""
+    async with get_db() as db:
+        async with db.execute(
+            "SELECT title, done, done_at FROM tasks WHERE task_date = ?", (task_date,)
+        ) as cur:
+            prev = {
+                r["title"].strip().lower(): (r["done"], r["done_at"])
+                for r in await cur.fetchall()
+            }
+        await db.execute("DELETE FROM tasks WHERE task_date = ?", (task_date,))
+        for title in titles:
+            done, done_at = prev.get(title.strip().lower(), (0, None))
+            await db.execute(
+                "INSERT INTO tasks(task_date, title, source, done, done_at) VALUES (?,?,?,?,?)",
+                (task_date, title, "ai", done, done_at),
+            )
+        await db.commit()
+
+
 async def delete_task(task_id: int) -> None:
     async with get_db() as db:
         await db.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
