@@ -55,7 +55,23 @@ async def morning_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
 
 async def morning_plan(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data["morning_plan"] = update.message.text
+    plan_text = update.message.text
+    context.user_data["morning_plan"] = plan_text
+
+    # Sync the stated plan into today's task list so the morning check-in and
+    # /tasks are a single source of truth. If the user listed concrete items we
+    # use them verbatim; otherwise we let the AI compose the day's tasks.
+    import keyboards
+    from handlers.tasks import (
+        generate_daily_tasks, parse_task_lines, today as today_str,
+    )
+    items = parse_task_lines(plan_text)
+    if not items:
+        ctx = await db.build_context_snapshot()
+        items = await generate_daily_tasks(ctx, bot=context.bot, chat_id=update.effective_chat.id)
+    if items:
+        await db.replace_tasks(today_str(), items, horizon="day")
+
     await update.message.reply_text("Що може тебе сьогодні загальмувати? (або напиши «нічого»)")
     return MORNING_BLOCKER
 
@@ -77,6 +93,17 @@ async def morning_blocker(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         ai_response=ai_response,
     )
     await update.message.reply_text(f"✅ {ai_response}")
+
+    # Show the synced day's tasks so the plan is actionable right away.
+    import keyboards
+    from handlers.tasks import format_tasks_text, today as today_str
+    tasks = await db.get_tasks(today_str(), "day")
+    if tasks:
+        await update.message.reply_text(
+            format_tasks_text(tasks, "day"),
+            parse_mode="HTML",
+            reply_markup=keyboards.tasks_keyboard(tasks, "day"),
+        )
     return ConversationHandler.END
 
 
@@ -94,7 +121,19 @@ async def evening_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         context_block=f"Прогрес місяця: {bar}",
     )
     ai_msg = await ai_client.ask(prompt, ctx, bot=context.bot, chat_id=update.effective_chat.id)
-    full_msg = f"🌆 <b>Вечірній check-in</b>\n\n{ai_msg}\n\nЩо вдалось зробити сьогодні?"
+
+    # Anchor the review on today's actual task list.
+    from handlers.tasks import today as today_str
+    tasks = await db.get_tasks(today_str(), "day")
+    tasks_line = ""
+    if tasks:
+        done = sum(1 for t in tasks if t["done"])
+        pending = [t["title"] for t in tasks if not t["done"]]
+        tasks_line = f"\n\n📋 Задачі сьогодні: {done}/{len(tasks)} виконано."
+        if pending:
+            tasks_line += "\nЗалишилось: " + "; ".join(pending)
+
+    full_msg = f"🌆 <b>Вечірній check-in</b>\n\n{ai_msg}{tasks_line}\n\nЩо вдалось зробити сьогодні?"
     await _send_or_reply(update, full_msg, parse_mode="HTML")
     return EVENING_REVIEW
 

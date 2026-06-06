@@ -705,6 +705,96 @@ async def lead_status_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
 
+# ── Close lead → log income (sync) ────────────────────────────────────────────
+
+CLOSE_AMOUNT, CLOSE_COSTS = range(108, 110)
+
+
+async def close_lead_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    lead_id = int(query.data.split("_")[1])
+    lead = await db.get_lead(lead_id)
+    context.user_data["close_lead_id"] = lead_id
+    context.user_data["close_lead_name"] = lead["name"] if lead else "лід"
+    await query.message.reply_text(
+        f"🤝 Закриваємо угоду з <b>{context.user_data['close_lead_name']}</b>.\n\n"
+        "💰 Яку суму отримано? (введи число або 0, якщо без оплати)",
+        parse_mode="HTML",
+    )
+    return CLOSE_AMOUNT
+
+
+async def close_lead_amount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    try:
+        amount = float(update.message.text.replace(",", "").replace("$", "").strip())
+    except ValueError:
+        await update.message.reply_text("Введи число, наприклад: 1800 (або 0)")
+        return CLOSE_AMOUNT
+    context.user_data["close_amount"] = amount
+    if amount <= 0:
+        return await _finalize_close(update.message.reply_text, context, [])
+    await update.message.reply_text(
+        "Скільки з цієї суми пішло на витрати і куди?\n"
+        "Напр.: <code>дизайнер 200, розробник 300</code> (або «нема»)",
+        parse_mode="HTML",
+        reply_markup=keyboards.skip_keyboard(),
+    )
+    return CLOSE_COSTS
+
+
+async def close_lead_costs(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    costs = parse_cost_lines(update.message.text)
+    return await _finalize_close(update.message.reply_text, context, costs)
+
+
+async def close_lead_costs_skip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.callback_query.answer()
+    return await _finalize_close(update.callback_query.message.reply_text, context, [])
+
+
+async def _finalize_close(reply, context: ContextTypes.DEFAULT_TYPE, costs: list) -> int:
+    lead_id = context.user_data.pop("close_lead_id")
+    name = context.user_data.pop("close_lead_name", "лід")
+    amount = context.user_data.pop("close_amount", 0)
+    await db.update_lead(lead_id, status="closed", actual_value=amount)
+    if amount > 0:
+        income_id = await db.add_income(amount, name, lead_id=lead_id)
+        for category, c_amount in costs:
+            await db.add_expense(
+                c_amount, category, description="з оплати",
+                income_id=income_id, source="income",
+            )
+    ctx = await db.build_context_snapshot()
+    bar = income_bar(ctx["month_net"], ctx["goal"])
+    note = f"✅ Угоду з <b>{name}</b> закрито"
+    note += f" (+${amount:,.0f})." if amount > 0 else " без оплати."
+    await reply(
+        f"{note}\n\n💰 Чистий прибуток: {bar}\n<i>{income_breakdown(ctx)}</i>",
+        parse_mode="HTML",
+    )
+    return ConversationHandler.END
+
+
+async def close_lead_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("Скасовано.")
+    return ConversationHandler.END
+
+
+def close_lead_conversation() -> ConversationHandler:
+    return ConversationHandler(
+        entry_points=[CallbackQueryHandler(close_lead_start, pattern=r"^lstatus_\d+_closed$")],
+        states={
+            CLOSE_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, close_lead_amount)],
+            CLOSE_COSTS: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, close_lead_costs),
+                CallbackQueryHandler(close_lead_costs_skip, pattern="^skip$"),
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", close_lead_cancel)],
+    )
+
+
 # ── /pipeline ─────────────────────────────────────────────────────────────────
 
 async def pipeline(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

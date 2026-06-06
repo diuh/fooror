@@ -20,6 +20,7 @@ from handlers.checkin import morning_conversation, evening_conversation
 from handlers.commands import (
     ask_conversation,
     checkin_history,
+    close_lead_conversation,
     content_list,
     expense_add_conversation,
     expenses_cmd,
@@ -186,6 +187,7 @@ def main() -> None:
         expense_add_conversation(),
         sub_add_conversation(),
         lead_add_conversation(),
+        close_lead_conversation(),
         proposal_conversation(),
         price_conversation(),
         outreach_conversation(),
