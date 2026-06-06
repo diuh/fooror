@@ -173,7 +173,7 @@ async def generate_daily_tasks(
 def format_tasks_text(tasks: list[dict], horizon: str = "day") -> str:
     meta = HORIZON[horizon]
     if not tasks:
-        return f"{meta['noun'].capitalize()} ще не складено. Склади план: {meta['cmd']}"
+        return f"{meta['emoji']} <b>{meta['list_title']}</b>\n\nПлан ще не складено. Натисни кнопку нижче."
     done = sum(1 for t in tasks if t["done"])
     lines = [f"{meta['emoji']} <b>{meta['list_title']}</b> ({done}/{len(tasks)})\n"]
     for t in tasks:
@@ -337,7 +337,7 @@ async def _show_horizon(update: Update, context: ContextTypes.DEFAULT_TYPE, hori
     await target.reply_text(
         format_tasks_text(tasks, horizon),
         parse_mode="HTML",
-        reply_markup=keyboards.tasks_keyboard(tasks) if tasks else None,
+        reply_markup=keyboards.tasks_keyboard(tasks, horizon),
     )
 
 
@@ -462,7 +462,7 @@ async def setgoal_accept(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     goal = float(update.callback_query.data.split("_")[2])
     await _save_goal(goal, context)
     await update.callback_query.message.reply_text(
-        f"✅ Ціль на місяць встановлена: <b>${goal:,.0f}</b>\n\nЩодня складай план: /plan_day",
+        f"✅ Ціль на місяць встановлена: <b>${goal:,.0f}</b>\n\nТепер склади цілі місяця: /month",
         parse_mode="HTML",
     )
     return ConversationHandler.END
@@ -482,7 +482,7 @@ async def setgoal_manual_value(update: Update, context: ContextTypes.DEFAULT_TYP
         return GOAL_MANUAL
     await _save_goal(goal, context)
     await update.message.reply_text(
-        f"✅ Ціль на місяць встановлена: <b>${goal:,.0f}</b>\n\nЩодня складай план: /plan_day",
+        f"✅ Ціль на місяць встановлена: <b>${goal:,.0f}</b>\n\nТепер склади цілі місяця: /month",
         parse_mode="HTML",
     )
     return ConversationHandler.END
@@ -638,13 +638,14 @@ async def midday_reminder_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = await db.get_config("user_telegram_id")
     if not chat_id:
         return
-    tasks = await db.get_tasks(today())
+    tasks = await db.get_tasks(today(), "day")
     if not tasks:
         if is_weekend():
             return  # don't nag to make a plan on weekends
         await context.bot.send_message(
             chat_id=int(chat_id),
-            text="🕒 Полудень. План на сьогодні ще не складено — давай зробимо: /plan_day",
+            text="🕒 Полудень. План на сьогодні ще не складено.",
+            reply_markup=keyboards.tasks_keyboard([], "day"),
         )
         return
     pending = [t for t in tasks if not t["done"]]
@@ -659,9 +660,9 @@ async def midday_reminder_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     await context.bot.send_message(
         chat_id=int(chat_id),
         text=f"🕒 <b>Нагадування</b>\nЗалишилось {len(pending)} задач(і) на сьогодні:\n\n"
-             + format_tasks_text(tasks),
+             + format_tasks_text(tasks, "day"),
         parse_mode="HTML",
-        reply_markup=keyboards.tasks_keyboard(tasks),
+        reply_markup=keyboards.tasks_keyboard(tasks, "day"),
     )
 
 
@@ -755,6 +756,27 @@ async def free_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     _remember(context, "assistant", answer)
     for part in split_message(answer):
         await update.message.reply_text(part)
+
+
+async def month_start_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Runs daily at 9:00 Kyiv; only acts on the 1st of the month."""
+    chat_id = await db.get_config("user_telegram_id")
+    if not chat_id or date.today().day != 1:
+        return
+    mkey = month_key()
+    month_tasks = await db.get_tasks(mkey, "month")
+    if not month_tasks:
+        await context.bot.send_message(
+            chat_id=int(chat_id),
+            parse_mode="HTML",
+            text=(
+                "📅 <b>Новий місяць — новий старт!</b>\n\n"
+                "Щоб план тижня і дня мали сенс, спочатку:\n\n"
+                "1️⃣ /setgoal — встанови фінансову ціль місяця\n"
+                "2️⃣ /month — склади цілі місяця\n\n"
+                "Після цього /week і /tasks будуть каскадно виводитись з них."
+            ),
+        )
 
 
 async def month_end_job(context: ContextTypes.DEFAULT_TYPE) -> None:

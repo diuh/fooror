@@ -114,8 +114,8 @@ def skip_keyboard() -> InlineKeyboardMarkup:
     ]])
 
 
-def tasks_keyboard(tasks: list[dict]) -> InlineKeyboardMarkup:
-    """One button per task that toggles its done state, plus a refresh row."""
+def tasks_keyboard(tasks: list[dict], horizon: str = "day") -> InlineKeyboardMarkup:
+    """One button per task that toggles its done state, plus a generate/re-generate row."""
     rows = []
     for t in tasks:
         mark = "✅" if t["done"] else "⬜️"
@@ -123,7 +123,9 @@ def tasks_keyboard(tasks: list[dict]) -> InlineKeyboardMarkup:
         if len(title) > 40:
             title = title[:39] + "…"
         rows.append([InlineKeyboardButton(f"{mark} {title}", callback_data=f"task_{t['id']}")])
-    return InlineKeyboardMarkup(rows) if rows else InlineKeyboardMarkup([])
+    label = "♻️ Перегенерувати план" if tasks else "✨ Скласти план"
+    rows.append([InlineKeyboardButton(label, callback_data=f"cmd_plan_{horizon}")])
+    return InlineKeyboardMarkup(rows)
 
 
 def plan_confirm_keyboard() -> InlineKeyboardMarkup:

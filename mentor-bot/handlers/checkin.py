@@ -194,21 +194,48 @@ async def morning_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     # On weekends we never auto-plan — the user makes a plan only if they
     # explicitly ask via /plan_day. A manually-made weekend plan still shows.
     import keyboards
-    from handlers.tasks import generate_daily_tasks, format_tasks_text, is_weekend, today as today_str
-    existing = await db.get_tasks(today_str())
+    from handlers.tasks import (
+        generate_daily_tasks, format_tasks_text, is_weekend,
+        month_key, week_key, today as today_str,
+    )
+
+    # Cascade nudge: remind to set higher-level plan first
+    today_d = date.today()
+    if today_d.day == 1:
+        mkey = month_key()
+        if not await db.get_tasks(mkey, "month"):
+            await context.bot.send_message(
+                chat_id=int(chat_id),
+                text=(
+                    "⚠️ Задачі місяця ще не задано.\n"
+                    "Спочатку /month — тоді план дня буде прив'язаний до місячних цілей."
+                ),
+            )
+    elif today_d.weekday() == 0:  # Monday
+        wkey = week_key()
+        if not await db.get_tasks(wkey, "week"):
+            await context.bot.send_message(
+                chat_id=int(chat_id),
+                text=(
+                    "⚠️ Пріоритети тижня ще не задано.\n"
+                    "Зайди в /week — це допоможе краще спланувати день."
+                ),
+            )
+
+    existing = await db.get_tasks(today_str(), "day")
     if not existing and not is_weekend():
         user_data = context.application.user_data.get(int(chat_id), {})
         content_plan = user_data.get("last_content_plan")
         proposed = await generate_daily_tasks(ctx, bot=context.bot, chat_id=int(chat_id), content_plan=content_plan)
         if proposed:
             await db.add_tasks(today_str(), proposed, source="ai")
-    tasks = await db.get_tasks(today_str())
+    tasks = await db.get_tasks(today_str(), "day")
     if tasks:
         await context.bot.send_message(
             chat_id=int(chat_id),
-            text=format_tasks_text(tasks),
+            text=format_tasks_text(tasks, "day"),
             parse_mode="HTML",
-            reply_markup=keyboards.tasks_keyboard(tasks),
+            reply_markup=keyboards.tasks_keyboard(tasks, "day"),
         )
 
 
