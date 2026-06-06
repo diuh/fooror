@@ -564,6 +564,14 @@ async def add_proposal(
         return cur.lastrowid
 
 
+async def get_proposals(limit: int = 10) -> list[dict]:
+    async with get_db() as db:
+        async with db.execute(
+            "SELECT * FROM proposals ORDER BY created_at DESC LIMIT ?", (limit,)
+        ) as cur:
+            return [dict(r) for r in await cur.fetchall()]
+
+
 # ── Tasks ─────────────────────────────────────────────────────────────────────
 
 async def add_task(period_key: str, title: str, source: str = "ai", horizon: str = "day") -> int:
@@ -832,11 +840,28 @@ async def build_context_snapshot() -> dict:
     tasks_today = await get_tasks(today.isoformat())
     tasks_done = sum(1 for t in tasks_today if t["done"])
 
+    # Cross-feature awareness: upcoming meetings, active subscriptions, content plan.
+    kyiv, utc = pytz.timezone("Europe/Kyiv"), pytz.utc
+    raw_meetings = await get_upcoming_meetings(3)
+    upcoming_meetings = []
+    for m in raw_meetings:
+        start = utc.localize(datetime.fromisoformat(m["start_utc"])).astimezone(kyiv)
+        upcoming_meetings.append({
+            "title": m["title"],
+            "when": start.strftime("%d.%m %H:%M"),
+            "online": bool(m["is_online"]),
+        })
+    subscriptions = await get_subscriptions()
+    content_plan = await get_config("content_plan")
+
     return {
         "today": today.isoformat(),
         "now_local": now_local,
         "month": month,
         "days_left": days_left,
+        "upcoming_meetings": upcoming_meetings,
+        "subscriptions": subscriptions,
+        "content_plan": content_plan,
         "goal": goal,
         "month_income": month_income,
         "month_oneoff_expenses": month_oneoff,

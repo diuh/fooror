@@ -99,10 +99,7 @@ async def _generate_proposal(update_or_query, context, budget: str) -> int:
     scope = context.user_data.pop("prop_scope", "")
     features = context.user_data.pop("prop_features", "стандарт")
 
-    if hasattr(update_or_query, "message"):
-        msg = update_or_query.message
-    else:
-        msg = update_or_query.message
+    msg = update_or_query.message
 
     await msg.reply_text("⏳ Генерую пропозицію…")
     ctx = await db.build_context_snapshot()

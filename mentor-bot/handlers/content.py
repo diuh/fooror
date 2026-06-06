@@ -196,9 +196,10 @@ async def _generate_weekly(msg, context) -> int:
         context_block=build_context_block(ctx),
     )
     answer = await ai_client.ask_long(prompt, ctx, bot=msg.get_bot(), chat_id=msg.chat_id)
-    # Remember the plan so follow-up free-text messages revise THIS plan
-    # instead of being misread as edits to today's task list.
+    # Persist the plan (DB + user_data) so daily task generation and the AI
+    # agent stay aware of it across restarts.
     context.user_data["last_content_plan"] = answer
+    await db.set_config("content_plan", answer)
     for part in split_message(answer):
         await msg.reply_text(part)
     return ConversationHandler.END

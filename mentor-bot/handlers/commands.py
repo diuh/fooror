@@ -68,15 +68,22 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
     overdue = ctx.get("overdue_leads", [])
     streak = ctx.get("streak", 0)
+    tasks_today = ctx.get("tasks_today", [])
+    tasks_done = ctx.get("tasks_done", 0)
+    meetings = ctx.get("upcoming_meetings", [])
 
     text = (
         f"📊 <b>Поточний статус</b>\n\n"
         f"💰 Чистий: {bar}\n"
         f"<i>{income_breakdown(ctx)}</i>\n"
         f"📅 Залишилось {ctx['days_left']} дн. | темп ${ctx['daily_pace']:,.0f}/день чистими\n\n"
+        f"✅ Задачі сьогодні: {tasks_done}/{len(tasks_today)}\n"
         f"🔗 Активних лідів: {active} (≈${active_val:,.0f})\n"
         f"🔥 Streak: {streak} дн.\n"
     )
+    if meetings:
+        m = meetings[0]
+        text += f"\n📅 Найближча зустріч: {m['when']} — {m['title']}"
     if overdue:
         names = ", ".join(l["name"] for l in overdue[:3])
         text += f"\n⚠️ Прострочені follow-up: {names}"
@@ -88,51 +95,35 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = (
-        "📋 <b>Команди:</b>\n\n"
-        "<b>Навігація</b>\n"
-        "/menu — головне меню\n"
-        "/status — швидкий огляд\n\n"
+        "💬 <b>Найпростіше — просто напиши, що треба</b>, я зрозумію:\n"
+        "<i>«запиши оплату 1500 від Acme, 300 дизайнеру», «постав зустріч завтра "
+        "15:00 онлайн з john@acme.com», «додай витрату 40 реклама», «закрий ліда "
+        "Beta на 2000», «який статус?»</i>\n\n"
+        "📋 <b>Команди (запасний варіант):</b>\n\n"
+        "<b>Огляд</b>\n"
+        "/menu · /status\n\n"
         "<b>Дохід і витрати</b>\n"
         "/income — чистий прибуток місяця\n"
-        "/income_add — додати оплату (+ витрати з неї)\n"
-        "/income_history — історія по місяцях\n"
-        "/expense_add — додати разову витрату\n"
-        "/expenses — витрати місяця\n"
-        "/subscriptions — підписки (додати/видалити)\n"
-        "/sub_add — додати підписку\n"
-        "/goal — переглянути/змінити ціль\n\n"
-        "<b>Ліди</b>\n"
-        "/leads — список лідів\n"
-        "/lead_add — додати ліда\n"
-        "/lead_update — змінити статус ліда\n"
-        "/pipeline — воронка продажів\n"
-        "/follow_up — прострочені follow-up\n\n"
-        "<b>Продажі</b>\n"
-        "/proposal — генерація пропозиції\n"
-        "/price — калькулятор ціни\n"
-        "/outreach — холодне повідомлення\n"
-        "/objection — відпрацювання заперечення\n"
-        "/pitch — elevator pitch\n\n"
+        "/income_add — оплата (+ витрати з неї)\n"
+        "/income_history · /expense_add · /expenses\n"
+        "/subscriptions · /sub_add · /goal\n\n"
         "<b>Планування</b>\n"
-        "/plan_day — план задач на день\n"
-        "/tasks — задачі на сьогодні\n"
-        "/setgoal — поставити ціль на місяць\n"
-        "/month_review — аналіз місяця\n"
-        "/channels — підбір каналів залучення\n\n"
+        "/tasks · /week · /month · /plan\n"
+        "/setgoal · /month_review · /channels\n\n"
+        "<b>Зустрічі</b>\n"
+        "/meetings — найближчі зустрічі\n\n"
+        "<b>Ліди</b>\n"
+        "/leads · /lead_add · /lead_update\n"
+        "/pipeline · /follow_up\n\n"
+        "<b>Продажі</b>\n"
+        "/proposal · /proposals · /price\n"
+        "/outreach · /objection · /pitch\n\n"
         "<b>Check-in</b>\n"
-        "/morning — ранковий check-in\n"
-        "/evening — вечірній review\n"
-        "/checkin_history — останні 7 днів\n"
-        "/streak — серія check-in\n\n"
+        "/morning · /evening · /checkin_history · /streak\n\n"
         "<b>Контент</b>\n"
-        "/post_idea — ідея посту\n"
-        "/weekly_plan — план на тиждень\n"
-        "/brand — порада по бренду\n"
-        "/content_list — збережені ідеї\n\n"
+        "/post_idea · /weekly_plan · /brand · /content_list\n\n"
         "<b>Ментор</b>\n"
-        "/ask — вільне питання\n"
-        "/review_week — тижневий ретроспектив\n"
-        "/motivate — мотивація на основі цифр"
+        "/ask · /review_week · /motivate"
     )
     await update.message.reply_text(text, parse_mode="HTML")
 
@@ -908,6 +899,19 @@ async def motivate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 # ── /content_list ─────────────────────────────────────────────────────────────
+
+async def proposals_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    rows = await db.get_proposals()
+    if not rows:
+        await update.message.reply_text("Збережених пропозицій немає. Створи через /proposal")
+        return
+    lines = [f"📄 <b>Збережені пропозиції ({len(rows)}):</b>\n"]
+    for p in rows:
+        created = (p.get("created_at") or "")[:10]
+        scope = (p.get("scope_summary") or "")[:60]
+        lines.append(f"• <b>{p.get('project_type', '—')}</b> ({created})\n  {scope}")
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
 
 async def content_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     ideas = await db.get_content_ideas()

@@ -1,10 +1,9 @@
 """Meeting scheduling via free text → Google Calendar, plus Telegram reminders.
 
-Flow: free_text_handler detects a [ЗУСТРІЧ]{json} reply from Claude and calls
-handle_meeting_intent, which shows a confirmation card. On confirm we create the
-Google Calendar event (Meet link + email invites for online) and store it. A
-repeating job sends Telegram reminders (online: 5 min before; offline: 1 h and
-5 min before).
+Flow: the AI agent calls the create_meeting tool, which routes to
+prepare_meeting and shows a confirmation card. On confirm we create the Google
+Calendar event (Meet link + email invites for online) and store it. A repeating
+job sends Telegram reminders (online: 5 min before; offline: 1 h and 5 min before).
 """
 
 import json

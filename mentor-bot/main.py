@@ -39,6 +39,7 @@ from handlers.commands import (
     menu_callback,
     motivate,
     pipeline,
+    proposals_cmd,
     review_week,
     start,
     status,
@@ -142,6 +143,7 @@ async def post_init(application: Application) -> None:
         BotCommand("pipeline", "Воронка продажів"),
         BotCommand("follow_up", "Прострочені follow-up"),
         BotCommand("proposal", "Генерація пропозиції"),
+        BotCommand("proposals", "Збережені пропозиції"),
         BotCommand("price", "Калькулятор ціни"),
         BotCommand("outreach", "Холодне повідомлення"),
         BotCommand("objection", "Відпрацювати заперечення"),
@@ -213,6 +215,7 @@ def main() -> None:
     app.add_handler(CommandHandler("leads", leads))
     app.add_handler(CommandHandler("lead_update", lead_update_list))
     app.add_handler(CommandHandler("pipeline", pipeline))
+    app.add_handler(CommandHandler("proposals", proposals_cmd))
     app.add_handler(CommandHandler("follow_up", follow_up))
     app.add_handler(CommandHandler("streak", streak))
     app.add_handler(CommandHandler("checkin_history", checkin_history))

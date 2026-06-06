@@ -43,6 +43,17 @@ def build_context_block(ctx: dict) -> str:
     else:
         tasks_str = "план на сьогодні ще не складено"
 
+    meetings = ctx.get("upcoming_meetings", [])
+    meetings_str = "; ".join(
+        f"{m['when']} {m['title']}{' (онлайн)' if m['online'] else ''}" for m in meetings
+    ) if meetings else "немає запланованих"
+
+    subs = ctx.get("subscriptions", [])
+    subs_str = ", ".join(f"{s['name']} (${s['amount']:,.0f})" for s in subs) if subs else "немає"
+
+    content_plan = ctx.get("content_plan")
+    content_str = content_plan if content_plan else "ще не складено"
+
     return f"""ПОТОЧНИЙ КОНТЕКСТ (зараз: {ctx.get('now_local', ctx['today'])}):
 
 ДОХІД {ctx['month']} (ціль рахується по ЧИСТОМУ прибутку):
@@ -62,6 +73,12 @@ PIPELINE:
 
 ЗАДАЧІ НА СЬОГОДНІ:
 - {tasks_str}
+
+НАЙБЛИЖЧІ ЗУСТРІЧІ: {meetings_str}
+
+ПІДПИСКИ (щомісячні): {subs_str}
+
+КОНТЕНТ-ПЛАН: {content_str}
 
 АКТИВНІСТЬ:
 - Прострочені follow-up: {overdue_str}
