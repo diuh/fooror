@@ -802,8 +802,10 @@ async def cancel_meeting(meeting_id: int) -> dict | None:
 
 async def build_context_snapshot() -> dict:
     import datetime as dt
+    import pytz
 
     today = date.today()
+    now_local = datetime.now(pytz.timezone("Europe/Kyiv")).strftime("%Y-%m-%d %H:%M (%A)")
     month = today.strftime("%Y-%m")
     days_in_month = (dt.date(today.year + (today.month // 12), (today.month % 12) + 1, 1) - dt.timedelta(days=1)).day
     days_left = days_in_month - today.day
@@ -832,6 +834,7 @@ async def build_context_snapshot() -> dict:
 
     return {
         "today": today.isoformat(),
+        "now_local": now_local,
         "month": month,
         "days_left": days_left,
         "goal": goal,

@@ -95,3 +95,78 @@ async def ask_long(
 ) -> str:
     async with _typing(bot, chat_id):
         return await _generate(user_message, context_data, max_tokens=2048, model=MODEL_SMART)
+
+
+AGENT_INSTRUCTION = """Ти також керуєш ботом через інструменти (tools).
+Коли користувач просить ВИКОНАТИ дію (додати оплату/витрату/підписку, лід, задачі,
+запланувати зустріч, змінити статус ліда, спитати статус/огляд) — виклич відповідний
+інструмент із розпізнаними аргументами. Якщо це просто питання, сумнів, порада чи
+розмова — НЕ викликай інструментів, відповідай як ментор (2–4 речення).
+Не вигадуй дій, яких користувач не просив. Якщо бракує критичних даних (напр. суми) —
+коротко перепитай замість виклику інструмента. Відповідай мовою користувача."""
+
+
+def _text_from(content) -> str:
+    return "".join(b.text for b in content if getattr(b, "type", None) == "text").strip()
+
+
+async def run_agent(
+    user_message: str,
+    context_data: dict | None = None,
+    *,
+    tools: list[dict],
+    executor,
+    history: list[dict] | None = None,
+    bot=None,
+    chat_id=None,
+    max_turns: int = 6,
+) -> str:
+    """Tool-use loop. `executor(name, input)` is an async callable returning
+    {"result": str, "stop": bool}. When stop=True the loop ends immediately
+    (e.g. an action needs user confirmation). Returns the model's final text
+    (may be empty if it only called tools)."""
+    system_blocks: list[dict] = [
+        {"type": "text", "text": STATIC_PERSONA, "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": AGENT_INSTRUCTION},
+    ]
+    if context_data:
+        system_blocks.append({"type": "text", "text": build_context_block(context_data)})
+
+    messages: list[dict] = list(history or [])
+    messages.append({"role": "user", "content": user_message})
+
+    client = get_client()
+    async with _typing(bot, chat_id):
+        for _ in range(max_turns):
+            try:
+                resp = await client.messages.create(
+                    model=MODEL_FAST,
+                    max_tokens=1500,
+                    system=system_blocks,
+                    tools=tools,
+                    messages=messages,
+                )
+            except (anthropic.APIStatusError, anthropic.APITimeoutError):
+                return "Ментор зараз недоступний, спробуй за хвилину."
+
+            if resp.stop_reason != "tool_use":
+                return _text_from(resp.content)
+
+            messages.append({"role": "assistant", "content": resp.content})
+            tool_results = []
+            stop_now = False
+            for block in resp.content:
+                if getattr(block, "type", None) != "tool_use":
+                    continue
+                outcome = await executor(block.name, block.input)
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": outcome.get("result", "ok"),
+                })
+                if outcome.get("stop"):
+                    stop_now = True
+            messages.append({"role": "user", "content": tool_results})
+            if stop_now:
+                return ""
+    return ""

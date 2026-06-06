@@ -43,7 +43,7 @@ def build_context_block(ctx: dict) -> str:
     else:
         tasks_str = "план на сьогодні ще не складено"
 
-    return f"""ПОТОЧНИЙ КОНТЕКСТ (станом на {ctx['today']}):
+    return f"""ПОТОЧНИЙ КОНТЕКСТ (зараз: {ctx.get('now_local', ctx['today'])}):
 
 ДОХІД {ctx['month']} (ціль рахується по ЧИСТОМУ прибутку):
 - Оборот (усі оплати): ${ctx['month_income']:,.0f}

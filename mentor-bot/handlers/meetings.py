@@ -61,14 +61,6 @@ def _valid_emails(raw) -> list[str]:
 async def handle_meeting_intent(
     update: Update, context: ContextTypes.DEFAULT_TYPE, answer: str
 ) -> None:
-    if not config.google_enabled:
-        await update.message.reply_text(
-            "📅 Google Calendar ще не підключено. Щоб планувати зустрічі, додай "
-            "змінні GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REFRESH_TOKEN "
-            "(запусти gcal_auth.py локально)."
-        )
-        return
-
     data = _parse_meeting_json(answer)
     if not data or not data.get("start"):
         await update.message.reply_text(
@@ -76,11 +68,25 @@ async def handle_meeting_intent(
             "«зустріч з john@acme.com завтра о 15:00 онлайн на годину»"
         )
         return
+    await prepare_meeting(update.message, context, data)
+
+
+async def prepare_meeting(message, context: ContextTypes.DEFAULT_TYPE, data: dict) -> None:
+    """Validate a structured meeting dict, stash it as a pending confirmation
+    and show the confirmation card. Reused by both the agent tool and the
+    legacy text-intent path. `message` is the Telegram Message to reply to."""
+    if not config.google_enabled:
+        await message.reply_text(
+            "📅 Google Calendar ще не підключено. Щоб планувати зустрічі, додай "
+            "змінні GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REFRESH_TOKEN "
+            "(запусти gcal_auth.py локально)."
+        )
+        return
 
     try:
         naive_start = datetime.strptime(data["start"], "%Y-%m-%dT%H:%M")
-    except (ValueError, TypeError):
-        await update.message.reply_text(
+    except (ValueError, TypeError, KeyError):
+        await message.reply_text(
             "Не вдалось розпізнати час. Уточни дату й час, наприклад «завтра о 15:00»."
         )
         return
@@ -124,7 +130,7 @@ async def handle_meeting_intent(
     reminder = "нагадаю за 5 хв" if is_online else "нагадаю за годину і за 5 хв"
     lines.append(f"\n⏰ {reminder}.")
 
-    await update.message.reply_text(
+    await message.reply_text(
         "\n".join(lines),
         parse_mode="HTML",
         reply_markup=keyboards.meeting_confirm_keyboard(),

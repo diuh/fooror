@@ -1,5 +1,5 @@
 import re
-from datetime import date, datetime
+from datetime import date
 
 from telegram import Update
 from telegram.ext import (
@@ -18,7 +18,6 @@ from formatters import income_bar, split_message
 from prompts.templates import (
     CHANNELS_TEMPLATE,
     DAILY_PLAN_TEMPLATE,
-    FREE_TEXT_TEMPLATE,
     MONTH_ANALYSIS_TEMPLATE,
     MONTH_PLAN_TEMPLATE,
     MONTHLY_GOAL_TEMPLATE,
@@ -666,108 +665,6 @@ async def midday_reminder_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         parse_mode="HTML",
         reply_markup=keyboards.tasks_keyboard(tasks, "day"),
     )
-
-
-def _remember(context: ContextTypes.DEFAULT_TYPE, role: str, text: str) -> None:
-    """Keep a short rolling memory of the last few free-text turns so the
-    mentor doesn't lose the thread between messages."""
-    dialog = context.user_data.setdefault("dialog", [])
-    dialog.append({"role": role, "text": text})
-    del dialog[:-8]  # keep only the last 8 turns
-
-
-def _format_dialog(context: ContextTypes.DEFAULT_TYPE) -> str:
-    dialog = context.user_data.get("dialog", [])
-    if not dialog:
-        return "(порожньо)"
-    label = {"user": "Користувач", "assistant": "Ментор"}
-    return "\n".join(f"{label[d['role']]}: {d['text']}" for d in dialog)
-
-
-async def free_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Global fallback for free-text messages outside active conversations.
-
-    Routes the message with conversation context: it can edit today's task
-    list, revise the content plan, or just answer as a mentor — and it keeps
-    these three things distinct so a content discussion never overwrites the
-    day's tasks (and completed tasks are never silently reset).
-    """
-    text = update.message.text.strip()
-    _remember(context, "user", text)
-
-    ctx = await db.build_context_snapshot()
-    day_tasks = await db.get_tasks(today(), "day")
-    week_tasks = await db.get_tasks(week_key(), "week")
-    month_tasks = await db.get_tasks(month_key(), "month")
-
-    def _fmt(items, empty):
-        return "\n".join(
-            f"- {'[✅]' if t['done'] else '[ ]'} {t['title']}" for t in items
-        ) or empty
-
-    content_plan = context.user_data.get("last_content_plan")
-    if content_plan:
-        content_plan_status = ""
-    else:
-        content_plan = "(ще не складено)"
-        content_plan_status = " — відсутній"
-
-    import pytz
-    now_local = datetime.now(pytz.timezone("Europe/Kyiv")).strftime("%Y-%m-%d %H:%M (%A)")
-    prompt = FREE_TEXT_TEMPLATE.format(
-        now_local=now_local,
-        dialog=_format_dialog(context),
-        current_tasks=_fmt(day_tasks, "(на сьогодні задач немає)"),
-        week_tasks=_fmt(week_tasks, "(пріоритетів на тиждень немає)"),
-        month_tasks=_fmt(month_tasks, "(цілей на місяць немає)"),
-        content_plan=content_plan,
-        content_plan_status=content_plan_status,
-        user_message=text,
-    )
-    answer = await ai_client.ask(prompt, ctx, bot=context.bot, chat_id=update.effective_chat.id)
-
-    # Meeting intent takes priority over plan edits.
-    if "[ЗУСТРІЧ]" in answer:
-        from handlers.meetings import handle_meeting_intent
-        _remember(context, "assistant", "(запропонував створити зустріч)")
-        await handle_meeting_intent(update, context, answer)
-        return
-
-    # Plan-edit blocks for each horizon. Tag → (horizon, period_key, label).
-    horizon_blocks = [
-        ("[ЗАДАЧІ]", "day", today(), "задачі на сьогодні"),
-        ("[ТИЖДЕНЬ]", "week", week_key(), "пріоритети тижня"),
-        ("[МІСЯЦЬ]", "month", month_key(), "цілі місяця"),
-    ]
-    for tag, horizon, pkey, label in horizon_blocks:
-        if tag in answer:
-            block = answer.split(tag, 1)[1]
-            new_items = parse_task_lines(block)
-            await db.replace_tasks(pkey, new_items, horizon=horizon)
-            saved = await db.get_tasks(pkey, horizon)
-            _remember(context, "assistant", f"(оновив {label})")
-            if saved:
-                await update.message.reply_text(
-                    "✏️ " + format_tasks_text(saved, horizon),
-                    parse_mode="HTML",
-                    reply_markup=keyboards.tasks_keyboard(saved),
-                )
-            else:
-                await update.message.reply_text(f"🗑 Усі {label} видалено.")
-            return
-
-    if "[КОНТЕНТ-ПЛАН]" in answer:
-        plan_text = answer.split("[КОНТЕНТ-ПЛАН]", 1)[1].strip()
-        context.user_data["last_content_plan"] = plan_text
-        _remember(context, "assistant", "(оновив контент-план)")
-        await update.message.reply_text("✏️ <b>Оновлений контент-план:</b>", parse_mode="HTML")
-        for part in split_message(plan_text):
-            await update.message.reply_text(part)
-        return
-
-    _remember(context, "assistant", answer)
-    for part in split_message(answer):
-        await update.message.reply_text(part)
 
 
 async def month_start_job(context: ContextTypes.DEFAULT_TYPE) -> None:

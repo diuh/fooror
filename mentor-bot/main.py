@@ -60,7 +60,6 @@ from handlers.content import (
 )
 from handlers.tasks import (
     channels_conversation,
-    free_text_handler,
     month_cmd,
     month_review,
     plan_day_conversation,
@@ -75,6 +74,11 @@ from handlers.meetings import (
     meeting_confirm,
     meeting_delete,
     meetings_cmd,
+)
+from handlers.agent import (
+    action_cancel,
+    action_confirm,
+    agent_text_handler,
 )
 
 logging.basicConfig(
@@ -245,16 +249,18 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(meeting_cancel, pattern=r"^mtg_cancel$"))
     app.add_handler(CallbackQueryHandler(meeting_delete, pattern=r"^mtgdel_\d+$"))
     app.add_handler(CallbackQueryHandler(sub_delete, pattern=r"^subdel_\d+$"))
+    app.add_handler(CallbackQueryHandler(action_confirm, pattern=r"^act_confirm$"))
+    app.add_handler(CallbackQueryHandler(action_cancel, pattern=r"^act_cancel$"))
     app.add_handler(CallbackQueryHandler(expenses_cmd, pattern=r"^cmd_expenses$"))
     app.add_handler(CallbackQueryHandler(subscriptions_cmd, pattern=r"^cmd_subscriptions$"))
     app.add_handler(CallbackQueryHandler(menu_callback, pattern=r"^(cmd_|cancel)"))
 
-    # Lowest-priority catch-all: free-text not consumed by a command or an
-    # active conversation is treated as a plan edit (or a question to the
-    # mentor when no tasks exist for today). Must be registered last so all
-    # ConversationHandlers and CommandHandlers get first claim on the message.
+    # Lowest-priority catch-all: free text not consumed by a command or an
+    # active conversation goes to the AI agent, which decides whether to call a
+    # tool (log income, add task/expense/lead, schedule a meeting…) or just
+    # answer as a mentor. Registered last so conversations/commands win first.
     app.add_handler(
-        MessageHandler(filters.TEXT & ~filters.COMMAND, free_text_handler)
+        MessageHandler(filters.TEXT & ~filters.COMMAND, agent_text_handler)
     )
 
     register_jobs(app)

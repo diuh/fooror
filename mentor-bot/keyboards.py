@@ -160,6 +160,13 @@ def meeting_confirm_keyboard() -> InlineKeyboardMarkup:
     ]])
 
 
+def action_confirm_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Підтвердити", callback_data="act_confirm"),
+        InlineKeyboardButton("❌ Скасувати", callback_data="act_cancel"),
+    ]])
+
+
 def meetings_keyboard(meetings: list[dict]) -> InlineKeyboardMarkup:
     """A cancel button per upcoming meeting."""
     rows = []
