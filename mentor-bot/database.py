@@ -121,10 +121,28 @@ async def init_db() -> None:
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
 
+            CREATE TABLE IF NOT EXISTS meetings (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                gcal_event_id TEXT,
+                title         TEXT NOT NULL,
+                start_utc     TEXT NOT NULL,
+                end_utc       TEXT NOT NULL,
+                is_online     INTEGER NOT NULL DEFAULT 0,
+                location      TEXT,
+                meet_link     TEXT,
+                attendees     TEXT,
+                html_link     TEXT,
+                reminded_1h   INTEGER NOT NULL DEFAULT 0,
+                reminded_5m   INTEGER NOT NULL DEFAULT 0,
+                canceled      INTEGER NOT NULL DEFAULT 0,
+                created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
             CREATE INDEX IF NOT EXISTS idx_leads_status    ON leads(status);
             CREATE INDEX IF NOT EXISTS idx_income_month    ON income_log(month);
             CREATE INDEX IF NOT EXISTS idx_daily_logs_date ON daily_logs(log_date, log_type);
             CREATE INDEX IF NOT EXISTS idx_tasks_date      ON tasks(task_date);
+            CREATE INDEX IF NOT EXISTS idx_meetings_start  ON meetings(start_utc);
         """)
 
         # Migration: add horizon/period_key to pre-existing tasks tables and
@@ -591,6 +609,86 @@ async def get_monthly_plan(month: str) -> dict | None:
         async with db.execute("SELECT * FROM monthly_plans WHERE month = ?", (month,)) as cur:
             row = await cur.fetchone()
             return dict(row) if row else None
+
+
+# ── Meetings ──────────────────────────────────────────────────────────────────
+
+async def add_meeting(
+    title: str,
+    start_utc: str,
+    end_utc: str,
+    is_online: bool,
+    location: str = "",
+    meet_link: str = "",
+    attendees: str = "",
+    html_link: str = "",
+    gcal_event_id: str = "",
+) -> int:
+    async with get_db() as db:
+        cur = await db.execute(
+            """INSERT INTO meetings
+               (gcal_event_id, title, start_utc, end_utc, is_online,
+                location, meet_link, attendees, html_link)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
+            (gcal_event_id, title, start_utc, end_utc, int(is_online),
+             location, meet_link, attendees, html_link),
+        )
+        await db.commit()
+        return cur.lastrowid
+
+
+async def get_meeting(meeting_id: int) -> dict | None:
+    async with get_db() as db:
+        async with db.execute("SELECT * FROM meetings WHERE id = ?", (meeting_id,)) as cur:
+            row = await cur.fetchone()
+            return dict(row) if row else None
+
+
+async def get_upcoming_meetings(limit: int = 10) -> list[dict]:
+    now = datetime.utcnow().isoformat()
+    async with get_db() as db:
+        async with db.execute(
+            """SELECT * FROM meetings
+               WHERE canceled = 0 AND start_utc >= ?
+               ORDER BY start_utc LIMIT ?""",
+            (now, limit),
+        ) as cur:
+            return [dict(r) for r in await cur.fetchall()]
+
+
+async def get_meetings_for_reminder() -> list[dict]:
+    """Future, non-canceled meetings that still have a pending reminder flag."""
+    now = datetime.utcnow().isoformat()
+    async with get_db() as db:
+        async with db.execute(
+            """SELECT * FROM meetings
+               WHERE canceled = 0 AND start_utc >= ?
+               AND (reminded_1h = 0 OR reminded_5m = 0)
+               ORDER BY start_utc""",
+            (now,),
+        ) as cur:
+            return [dict(r) for r in await cur.fetchall()]
+
+
+async def mark_reminded(meeting_id: int, which: str) -> None:
+    column = "reminded_1h" if which == "1h" else "reminded_5m"
+    async with get_db() as db:
+        await db.execute(
+            f"UPDATE meetings SET {column} = 1 WHERE id = ?", (meeting_id,)
+        )
+        await db.commit()
+
+
+async def cancel_meeting(meeting_id: int) -> dict | None:
+    """Mark a meeting canceled. Returns the row (for deleting from Google)."""
+    async with get_db() as db:
+        async with db.execute("SELECT * FROM meetings WHERE id = ?", (meeting_id,)) as cur:
+            row = await cur.fetchone()
+            if not row:
+                return None
+        await db.execute("UPDATE meetings SET canceled = 1 WHERE id = ?", (meeting_id,))
+        await db.commit()
+        return dict(row)
 
 
 # ── Context Snapshot ──────────────────────────────────────────────────────────

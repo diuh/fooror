@@ -13,6 +13,7 @@ def main_menu() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton("🗂 Огляд планів", callback_data="cmd_plan_overview"),
+            InlineKeyboardButton("📅 Зустрічі", callback_data="cmd_meetings"),
         ],
         [
             InlineKeyboardButton("💰 Дохід", callback_data="cmd_income"),
@@ -136,6 +137,24 @@ def plan_confirm_keyboard() -> InlineKeyboardMarkup:
         ],
         [InlineKeyboardButton("✏️ Додати свою задачу", callback_data="plan_add_own")],
     ])
+
+
+def meeting_confirm_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Створити", callback_data="mtg_create"),
+        InlineKeyboardButton("❌ Скасувати", callback_data="mtg_cancel"),
+    ]])
+
+
+def meetings_keyboard(meetings: list[dict]) -> InlineKeyboardMarkup:
+    """A cancel button per upcoming meeting."""
+    rows = []
+    for m in meetings:
+        title = m["title"]
+        if len(title) > 30:
+            title = title[:29] + "…"
+        rows.append([InlineKeyboardButton(f"🗑 {title}", callback_data=f"mtgdel_{m['id']}")])
+    return InlineKeyboardMarkup(rows)
 
 
 def goal_confirm_keyboard(suggested: float | None) -> InlineKeyboardMarkup:

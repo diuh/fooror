@@ -1,5 +1,5 @@
 import re
-from datetime import date
+from datetime import date, datetime
 
 from telegram import Update
 from telegram.ext import (
@@ -710,7 +710,10 @@ async def free_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         content_plan = "(ще не складено)"
         content_plan_status = " — відсутній"
 
+    import pytz
+    now_local = datetime.now(pytz.timezone("Europe/Kyiv")).strftime("%Y-%m-%d %H:%M (%A)")
     prompt = FREE_TEXT_TEMPLATE.format(
+        now_local=now_local,
         dialog=_format_dialog(context),
         current_tasks=_fmt(day_tasks, "(на сьогодні задач немає)"),
         week_tasks=_fmt(week_tasks, "(пріоритетів на тиждень немає)"),
@@ -720,6 +723,13 @@ async def free_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         user_message=text,
     )
     answer = await ai_client.ask(prompt, ctx, bot=context.bot, chat_id=update.effective_chat.id)
+
+    # Meeting intent takes priority over plan edits.
+    if "[ЗУСТРІЧ]" in answer:
+        from handlers.meetings import handle_meeting_intent
+        _remember(context, "assistant", "(запропонував створити зустріч)")
+        await handle_meeting_intent(update, context, answer)
+        return
 
     # Plan-edit blocks for each horizon. Tag → (horizon, period_key, label).
     horizon_blocks = [

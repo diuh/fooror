@@ -65,6 +65,12 @@ from handlers.tasks import (
     tasks_cmd,
     week_cmd,
 )
+from handlers.meetings import (
+    meeting_cancel,
+    meeting_confirm,
+    meeting_delete,
+    meetings_cmd,
+)
 
 logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -108,6 +114,7 @@ async def post_init(application: Application) -> None:
         BotCommand("week", "Пріоритети тижня"),
         BotCommand("month", "Цілі місяця"),
         BotCommand("plan", "Огляд усіх планів"),
+        BotCommand("meetings", "Найближчі зустрічі"),
         BotCommand("setgoal", "Ціль місяця (wizard)"),
         BotCommand("month_review", "Аналіз місяця"),
         BotCommand("channels", "Підбір каналів залучення"),
@@ -200,6 +207,7 @@ def main() -> None:
     app.add_handler(CommandHandler("week", week_cmd))
     app.add_handler(CommandHandler("month", month_cmd))
     app.add_handler(CommandHandler("plan", plan_overview))
+    app.add_handler(CommandHandler("meetings", meetings_cmd))
     app.add_handler(CommandHandler("month_review", month_review))
 
     # Dynamic commands like /lead_update_5 arrive as messages. CommandHandler
@@ -218,6 +226,10 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(week_cmd, pattern=r"^cmd_week$"))
     app.add_handler(CallbackQueryHandler(month_cmd, pattern=r"^cmd_month$"))
     app.add_handler(CallbackQueryHandler(plan_overview, pattern=r"^cmd_plan_overview$"))
+    app.add_handler(CallbackQueryHandler(meetings_cmd, pattern=r"^cmd_meetings$"))
+    app.add_handler(CallbackQueryHandler(meeting_confirm, pattern=r"^mtg_create$"))
+    app.add_handler(CallbackQueryHandler(meeting_cancel, pattern=r"^mtg_cancel$"))
+    app.add_handler(CallbackQueryHandler(meeting_delete, pattern=r"^mtgdel_\d+$"))
     app.add_handler(CallbackQueryHandler(menu_callback, pattern=r"^(cmd_|cancel)"))
 
     # Lowest-priority catch-all: free-text not consumed by a command or an
