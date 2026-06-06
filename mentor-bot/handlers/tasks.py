@@ -534,6 +534,8 @@ async def _run_month_analysis(ctx: dict, month: str, bot, chat_id) -> str:
         month=month,
         context_block=build_context_block(ctx),
         month_income=ctx["month_income"],
+        month_expenses=ctx["month_expenses"],
+        month_net=ctx["month_net"],
         goal=ctx["goal"],
         pct=ctx["pct"],
         tasks_done=stats["done"],

@@ -43,7 +43,7 @@ async def morning_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         names = ", ".join(l["name"] for l in overdue[:3])
         overdue_note = f"\n\n⚠️ Прострочені follow-up: {names}"
 
-    bar = income_bar(ctx["month_income"], ctx["goal"])
+    bar = income_bar(ctx["month_net"], ctx["goal"])
     prompt = MORNING_TEMPLATE.format(
         time="ранок",
         context_block=f"Прогрес: {bar}{overdue_note}",
@@ -89,7 +89,7 @@ async def morning_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def evening_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     ctx = await db.build_context_snapshot()
-    bar = income_bar(ctx["month_income"], ctx["goal"])
+    bar = income_bar(ctx["month_net"], ctx["goal"])
     prompt = EVENING_TEMPLATE.format(
         context_block=f"Прогрес місяця: {bar}",
     )
@@ -178,7 +178,7 @@ async def morning_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     if overdue:
         names = ", ".join(l["name"] for l in overdue[:3])
         overdue_note = f"\n\n⚠️ Прострочені follow-up: {names}"
-    bar = income_bar(ctx["month_income"], ctx["goal"])
+    bar = income_bar(ctx["month_net"], ctx["goal"])
     prompt = MORNING_TEMPLATE.format(
         time="ранок",
         context_block=f"Прогрес: {bar}{overdue_note}",
@@ -244,7 +244,7 @@ async def evening_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     if not chat_id:
         return
     ctx = await db.build_context_snapshot()
-    bar = income_bar(ctx["month_income"], ctx["goal"])
+    bar = income_bar(ctx["month_net"], ctx["goal"])
     ai_msg = await ai_client.ask(
         f"Нагадай про вечірній check-in. Прогрес: {bar}. Скажи одну фразу.",
         ctx,

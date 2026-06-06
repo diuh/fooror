@@ -20,6 +20,10 @@ def main_menu() -> InlineKeyboardMarkup:
             InlineKeyboardButton("🔗 Ліди", callback_data="cmd_leads"),
         ],
         [
+            InlineKeyboardButton("💸 Витрати", callback_data="cmd_expenses"),
+            InlineKeyboardButton("🔁 Підписки", callback_data="cmd_subscriptions"),
+        ],
+        [
             InlineKeyboardButton("🎯 Ціль місяця", callback_data="cmd_setgoal"),
             InlineKeyboardButton("📡 Канали", callback_data="cmd_channels"),
         ],
@@ -137,6 +141,16 @@ def plan_confirm_keyboard() -> InlineKeyboardMarkup:
         ],
         [InlineKeyboardButton("✏️ Додати свою задачу", callback_data="plan_add_own")],
     ])
+
+
+def subscriptions_keyboard(subs: list[dict]) -> InlineKeyboardMarkup:
+    """A delete button per active subscription."""
+    rows = []
+    for s in subs:
+        rows.append([InlineKeyboardButton(
+            f"🗑 {s['name']} (${s['amount']:,.0f})", callback_data=f"subdel_{s['id']}"
+        )])
+    return InlineKeyboardMarkup(rows)
 
 
 def meeting_confirm_keyboard() -> InlineKeyboardMarkup:

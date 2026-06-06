@@ -45,10 +45,12 @@ def build_context_block(ctx: dict) -> str:
 
     return f"""ПОТОЧНИЙ КОНТЕКСТ (станом на {ctx['today']}):
 
-ДОХІД {ctx['month']}:
-- Отримано: ${ctx['month_income']:,.0f} / Ціль: ${ctx['goal']:,.0f} ({ctx['pct']:.1f}%)
+ДОХІД {ctx['month']} (ціль рахується по ЧИСТОМУ прибутку):
+- Оборот (усі оплати): ${ctx['month_income']:,.0f}
+- Витрати: ${ctx.get('month_oneoff_expenses', 0):,.0f} разові + ${ctx.get('subscriptions_total', 0):,.0f} підписки
+- Чистий прибуток: ${ctx.get('month_net', ctx['month_income']):,.0f} / Ціль: ${ctx['goal']:,.0f} ({ctx['pct']:.1f}%)
 - Залишилось днів у місяці: {ctx['days_left']}
-- Потрібний темп: ${ctx['daily_pace']:,.0f}/день щоб вийти на ціль
+- Потрібний темп: ${ctx['daily_pace']:,.0f}/день чистими щоб вийти на ціль
 - Остання оплата: {last_str}
 
 PIPELINE:

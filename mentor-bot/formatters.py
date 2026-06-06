@@ -1,8 +1,17 @@
 def income_bar(current: float, goal: float, width: int = 20) -> str:
     pct = min(current / goal, 1.0) if goal else 0
+    pct = max(pct, 0.0)
     filled = int(pct * width)
     bar = "█" * filled + "░" * (width - filled)
     return f"[{bar}] {pct * 100:.1f}% (${current:,.0f} / ${goal:,.0f})"
+
+
+def income_breakdown(ctx: dict) -> str:
+    return (
+        f"Оборот: ${ctx['month_income']:,.0f} | "
+        f"Витрати: ${ctx['month_oneoff_expenses']:,.0f} | "
+        f"Підписки: ${ctx['subscriptions_total']:,.0f}"
+    )
 
 
 def split_message(text: str, max_len: int = 4000) -> list[str]:
@@ -64,12 +73,20 @@ def format_leads_list(leads: list[dict]) -> str:
     return "\n\n".join(format_lead(l) for l in leads)
 
 
-def format_income_history(rows: list[dict]) -> str:
+def format_income_history(rows: list[dict], expenses_by_month: dict | None = None) -> str:
     if not rows:
         return "Записів про доходи ще немає."
+    expenses_by_month = expenses_by_month or {}
     lines = ["📊 <b>Дохід по місяцях:</b>\n"]
     for r in rows:
-        lines.append(f"  {r['month']}:  ${r['total']:,.0f}  ({r['n_payments']} оплат)")
+        exp = expenses_by_month.get(r["month"], 0)
+        net = r["total"] - exp
+        line = f"  {r['month']}:  оборот ${r['total']:,.0f}"
+        if exp:
+            line += f"  −${exp:,.0f}  =  <b>${net:,.0f}</b>"
+        line += f"  ({r['n_payments']} оплат)"
+        lines.append(line)
+    lines.append("\n<i>Витрати по місяцях не включають поточні підписки.</i>")
     return "\n".join(lines)
 
 

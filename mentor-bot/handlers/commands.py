@@ -1,3 +1,4 @@
+import re
 from datetime import date
 
 from telegram import Update
@@ -20,6 +21,7 @@ from formatters import (
     format_leads_list,
     format_pipeline,
     income_bar,
+    income_breakdown,
     split_message,
 )
 
@@ -56,7 +58,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     ctx = await db.build_context_snapshot()
-    bar = income_bar(ctx["month_income"], ctx["goal"])
+    bar = income_bar(ctx["month_net"], ctx["goal"])
     pipeline = ctx["pipeline"]
     active = sum(
         pipeline.get(s, {}).get("n", 0) for s in ("new", "negotiation", "proposal")
@@ -69,8 +71,9 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     text = (
         f"📊 <b>Поточний статус</b>\n\n"
-        f"💰 {bar}\n"
-        f"📅 Залишилось {ctx['days_left']} дн. | темп ${ctx['daily_pace']:,.0f}/день\n\n"
+        f"💰 Чистий: {bar}\n"
+        f"<i>{income_breakdown(ctx)}</i>\n"
+        f"📅 Залишилось {ctx['days_left']} дн. | темп ${ctx['daily_pace']:,.0f}/день чистими\n\n"
         f"🔗 Активних лідів: {active} (≈${active_val:,.0f})\n"
         f"🔥 Streak: {streak} дн.\n"
     )
@@ -89,10 +92,14 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "<b>Навігація</b>\n"
         "/menu — головне меню\n"
         "/status — швидкий огляд\n\n"
-        "<b>Дохід</b>\n"
-        "/income — прогрес місяця\n"
-        "/income_add — додати оплату\n"
+        "<b>Дохід і витрати</b>\n"
+        "/income — чистий прибуток місяця\n"
+        "/income_add — додати оплату (+ витрати з неї)\n"
         "/income_history — історія по місяцях\n"
+        "/expense_add — додати разову витрату\n"
+        "/expenses — витрати місяця\n"
+        "/subscriptions — підписки (додати/видалити)\n"
+        "/sub_add — додати підписку\n"
         "/goal — переглянути/змінити ціль\n\n"
         "<b>Ліди</b>\n"
         "/leads — список лідів\n"
@@ -134,19 +141,51 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def income(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     ctx = await db.build_context_snapshot()
-    bar = income_bar(ctx["month_income"], ctx["goal"])
+    bar = income_bar(ctx["month_net"], ctx["goal"])
     text = (
-        f"💰 <b>Дохід {ctx['month']}</b>\n\n"
+        f"💰 <b>Дохід {ctx['month']} (чистий прибуток)</b>\n\n"
         f"{bar}\n\n"
-        f"Залишилось: ${ctx['goal'] - ctx['month_income']:,.0f}\n"
-        f"Днів: {ctx['days_left']} | Темп: ${ctx['daily_pace']:,.0f}/день"
+        f"Оборот: ${ctx['month_income']:,.0f}\n"
+        f"Разові витрати: ${ctx['month_oneoff_expenses']:,.0f}\n"
+        f"Підписки: ${ctx['subscriptions_total']:,.0f}\n"
+        f"<b>Чистий прибуток: ${ctx['month_net']:,.0f}</b>\n\n"
+        f"Залишилось до цілі: ${ctx['goal'] - ctx['month_net']:,.0f}\n"
+        f"Днів: {ctx['days_left']} | Темп: ${ctx['daily_pace']:,.0f}/день чистими"
     )
     await update.message.reply_text(text, parse_mode="HTML")
 
 
 # ── /income_add ───────────────────────────────────────────────────────────────
 
-INCOME_AMOUNT, INCOME_DESC, INCOME_DATE = range(100, 103)
+INCOME_AMOUNT, INCOME_DESC, INCOME_DATE, INCOME_COSTS = range(100, 104)
+
+_NO_COST_WORDS = {"нема", "немає", "ні", "нi", "no", "0", "-", "—", "жодних"}
+
+
+def parse_cost_lines(text: str) -> list[tuple[str, float]]:
+    """Parse "дизайнер 200, розробник 300" → [("дизайнер",200),("розробник",300)].
+    A bare number → ("інше", number). Returns [] for "нема"/empty."""
+    if text.strip().lower() in _NO_COST_WORDS:
+        return []
+    result: list[tuple[str, float]] = []
+    # Split on ; newline, or a comma that is NOT between digits (so "$1,200"
+    # stays intact while "дизайнер 200, розробник 300" splits into two).
+    for chunk in re.split(r"[;\n]+|,(?!\d)", text):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        m = re.search(r"(\d[\d\s.,]*)", chunk)
+        if not m:
+            continue
+        try:
+            amount = float(m.group(1).replace(" ", "").replace(",", ""))
+        except ValueError:
+            continue
+        if amount <= 0:
+            continue
+        category = (chunk[: m.start()] + chunk[m.end():]).strip(" $:-—")
+        result.append((category or "інше", amount))
+    return result
 
 
 async def income_add_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -177,33 +216,71 @@ async def income_add_desc(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return INCOME_DATE
 
 
+async def _save_income_ask_costs(update: Update, context: ContextTypes.DEFAULT_TYPE, payment_date: str, reply) -> int:
+    amount = context.user_data.pop("income_amount")
+    desc = context.user_data.pop("income_desc")
+    income_id = await db.add_income(amount, desc, payment_date)
+    context.user_data["income_id"] = income_id
+    context.user_data["income_payment_date"] = payment_date
+    context.user_data["income_amount_saved"] = amount
+    await reply(
+        f"✅ Оплата збережена: <b>${amount:,.0f}</b> — {desc}\n\n"
+        "💸 Скільки з цієї оплати пішло на витрати і куди?\n"
+        "Напиши, напр.: <code>дизайнер 200, розробник 300</code> "
+        "(або «нема»)",
+        parse_mode="HTML",
+        reply_markup=keyboards.skip_keyboard(),
+    )
+    return INCOME_COSTS
+
+
 async def income_add_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     text = update.message.text.strip()
     payment_date = date.today().isoformat() if text.lower() in ("сьогодні", "today", "") else text
-    amount = context.user_data.pop("income_amount")
-    desc = context.user_data.pop("income_desc")
-    await db.add_income(amount, desc, payment_date)
-    ctx = await db.build_context_snapshot()
-    bar = income_bar(ctx["month_income"], ctx["goal"])
-    await update.message.reply_text(
-        f"✅ Додано: <b>${amount:,.0f}</b> — {desc}\n\n{bar}",
-        parse_mode="HTML",
-    )
-    return ConversationHandler.END
+    return await _save_income_ask_costs(update, context, payment_date, update.message.reply_text)
 
 
 async def income_add_skip_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.callback_query.answer()
-    amount = context.user_data.pop("income_amount")
-    desc = context.user_data.pop("income_desc")
-    await db.add_income(amount, desc)
+    return await _save_income_ask_costs(
+        update, context, date.today().isoformat(), update.callback_query.message.reply_text
+    )
+
+
+async def _finish_income(reply, context: ContextTypes.DEFAULT_TYPE, costs_note: str) -> int:
+    context.user_data.pop("income_id", None)
+    context.user_data.pop("income_payment_date", None)
+    context.user_data.pop("income_amount_saved", None)
     ctx = await db.build_context_snapshot()
-    bar = income_bar(ctx["month_income"], ctx["goal"])
-    await update.callback_query.message.reply_text(
-        f"✅ Додано: <b>${amount:,.0f}</b> — {desc}\n\n{bar}",
+    bar = income_bar(ctx["month_net"], ctx["goal"])
+    await reply(
+        f"{costs_note}💰 Чистий прибуток: {bar}\n<i>{income_breakdown(ctx)}</i>",
         parse_mode="HTML",
     )
     return ConversationHandler.END
+
+
+async def income_add_costs(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    costs = parse_cost_lines(update.message.text)
+    income_id = context.user_data.get("income_id")
+    payment_date = context.user_data.get("income_payment_date")
+    if costs:
+        for category, amount in costs:
+            await db.add_expense(
+                amount, category, description="з оплати",
+                expense_date=payment_date, income_id=income_id, source="income",
+            )
+        total = sum(a for _, a in costs)
+        breakdown = ", ".join(f"{c} ${a:,.0f}" for c, a in costs)
+        note = f"✅ Витрати додано (${total:,.0f}): {breakdown}\n\n"
+    else:
+        note = "✅ Без витрат.\n\n"
+    return await _finish_income(update.message.reply_text, context, note)
+
+
+async def income_add_costs_skip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.callback_query.answer()
+    return await _finish_income(update.callback_query.message.reply_text, context, "✅ Без витрат.\n\n")
 
 
 async def income_add_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -221,6 +298,10 @@ def income_add_conversation() -> ConversationHandler:
                 MessageHandler(filters.TEXT & ~filters.COMMAND, income_add_date),
                 CallbackQueryHandler(income_add_skip_date, pattern="^skip$"),
             ],
+            INCOME_COSTS: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, income_add_costs),
+                CallbackQueryHandler(income_add_costs_skip, pattern="^skip$"),
+            ],
         },
         fallbacks=[CommandHandler("cancel", income_add_cancel)],
     )
@@ -230,7 +311,205 @@ def income_add_conversation() -> ConversationHandler:
 
 async def income_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     rows = await db.get_income_history()
-    await update.message.reply_text(format_income_history(rows), parse_mode="HTML")
+    expenses_by_month = await db.get_expenses_by_month()
+    await update.message.reply_text(
+        format_income_history(rows, expenses_by_month), parse_mode="HTML"
+    )
+
+
+# ── /expense_add · /expenses ──────────────────────────────────────────────────
+
+EXPENSE_AMOUNT, EXPENSE_DESC = range(104, 106)
+
+
+async def expense_add_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    msg = update.callback_query.message if update.callback_query else update.message
+    if update.callback_query:
+        await update.callback_query.answer()
+    await msg.reply_text(
+        "💸 Скільки склала витрата? Введи суму в USD (наприклад: <b>60</b>)",
+        parse_mode="HTML",
+    )
+    return EXPENSE_AMOUNT
+
+
+async def expense_add_amount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    try:
+        amount = float(update.message.text.replace(",", "").replace("$", "").strip())
+    except ValueError:
+        await update.message.reply_text("Введи число, наприклад: 60")
+        return EXPENSE_AMOUNT
+    context.user_data["expense_amount"] = amount
+    await update.message.reply_text("На що? (категорія/опис, напр. «Figma» або «реклама»)")
+    return EXPENSE_DESC
+
+
+async def expense_add_desc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    amount = context.user_data.pop("expense_amount")
+    category = update.message.text.strip()
+    await db.add_expense(amount, category, source="manual")
+    ctx = await db.build_context_snapshot()
+    bar = income_bar(ctx["month_net"], ctx["goal"])
+    await update.message.reply_text(
+        f"✅ Витрата додана: <b>${amount:,.0f}</b> — {category}\n\n"
+        f"💰 Чистий прибуток: {bar}\n<i>{income_breakdown(ctx)}</i>",
+        parse_mode="HTML",
+    )
+    return ConversationHandler.END
+
+
+async def expense_add_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("Скасовано.")
+    return ConversationHandler.END
+
+
+def expense_add_conversation() -> ConversationHandler:
+    return ConversationHandler(
+        entry_points=[
+            CommandHandler("expense_add", expense_add_start),
+            CallbackQueryHandler(expense_add_start, pattern="^cmd_expense_add$"),
+        ],
+        states={
+            EXPENSE_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, expense_add_amount)],
+            EXPENSE_DESC: [MessageHandler(filters.TEXT & ~filters.COMMAND, expense_add_desc)],
+        },
+        fallbacks=[CommandHandler("cancel", expense_add_cancel)],
+    )
+
+
+async def expenses_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    target = update.callback_query.message if update.callback_query else update.message
+    if update.callback_query:
+        await update.callback_query.answer()
+    ctx = await db.build_context_snapshot()
+    rows = await db.get_month_expense_rows()
+    subs = await db.get_subscriptions()
+
+    lines = [f"💸 <b>Витрати {ctx['month']}</b>\n"]
+    if rows:
+        lines.append("<b>Разові:</b>")
+        for r in rows:
+            tag = " (з оплати)" if r["source"] == "income" else ""
+            lines.append(f"  • {r['category'] or 'інше'}: ${r['amount']:,.0f}{tag}")
+    else:
+        lines.append("Разових витрат цього місяця немає.")
+    lines.append("")
+    if subs:
+        lines.append("<b>Підписки (щомісяця):</b>")
+        for s in subs:
+            lines.append(f"  🔁 {s['name']}: ${s['amount']:,.0f}")
+    else:
+        lines.append("Підписок немає. Додай: /sub_add")
+    lines.append(
+        f"\n<b>Підсумок:</b>\nОборот ${ctx['month_income']:,.0f} − разові "
+        f"${ctx['month_oneoff_expenses']:,.0f} − підписки ${ctx['subscriptions_total']:,.0f} "
+        f"= <b>${ctx['month_net']:,.0f}</b> чистими"
+    )
+    await target.reply_text("\n".join(lines), parse_mode="HTML")
+
+
+# ── /subscriptions · /sub_add ─────────────────────────────────────────────────
+
+SUB_NAME, SUB_AMOUNT = range(106, 108)
+
+
+async def subscriptions_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    target = update.callback_query.message if update.callback_query else update.message
+    if update.callback_query:
+        await update.callback_query.answer()
+    subs = await db.get_subscriptions()
+    if not subs:
+        await target.reply_text(
+            "🔁 Підписок ще немає.\n\nДодай свою першу: /sub_add"
+        )
+        return
+    total = sum(s["amount"] for s in subs)
+    lines = ["🔁 <b>Активні підписки</b>\n"]
+    for s in subs:
+        lines.append(f"  • {s['name']}: ${s['amount']:,.0f}/міс")
+    lines.append(f"\n<b>Разом: ${total:,.0f}/міс</b>\n\nДодати: /sub_add")
+    await target.reply_text(
+        "\n".join(lines),
+        parse_mode="HTML",
+        reply_markup=keyboards.subscriptions_keyboard(subs),
+    )
+
+
+async def sub_delete(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    sub_id = int(query.data.split("_")[1])
+    await db.delete_subscription(sub_id)
+    await query.answer("🗑 Видалено")
+    subs = await db.get_subscriptions()
+    if not subs:
+        try:
+            await query.edit_message_text("🔁 Підписок більше немає.\n\nДодати: /sub_add")
+        except Exception:
+            pass
+        return
+    total = sum(s["amount"] for s in subs)
+    lines = ["🔁 <b>Активні підписки</b>\n"]
+    for s in subs:
+        lines.append(f"  • {s['name']}: ${s['amount']:,.0f}/міс")
+    lines.append(f"\n<b>Разом: ${total:,.0f}/міс</b>\n\nДодати: /sub_add")
+    try:
+        await query.edit_message_text(
+            "\n".join(lines),
+            parse_mode="HTML",
+            reply_markup=keyboards.subscriptions_keyboard(subs),
+        )
+    except Exception:
+        pass
+
+
+async def sub_add_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    msg = update.callback_query.message if update.callback_query else update.message
+    if update.callback_query:
+        await update.callback_query.answer()
+    await msg.reply_text("🔁 Назва підписки (напр. «Adobe CC», «ChatGPT»):")
+    return SUB_NAME
+
+
+async def sub_add_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data["sub_name"] = update.message.text.strip()
+    await update.message.reply_text("Скільки коштує на місяць у USD? (напр. 60)")
+    return SUB_AMOUNT
+
+
+async def sub_add_amount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    try:
+        amount = float(update.message.text.replace(",", "").replace("$", "").strip())
+    except ValueError:
+        await update.message.reply_text("Введи число, наприклад: 60")
+        return SUB_AMOUNT
+    name = context.user_data.pop("sub_name")
+    await db.add_subscription(name, amount)
+    total = await db.get_subscriptions_total()
+    await update.message.reply_text(
+        f"✅ Підписка додана: <b>{name}</b> — ${amount:,.0f}/міс\n\n"
+        f"Усього підписок: ${total:,.0f}/міс",
+        parse_mode="HTML",
+    )
+    return ConversationHandler.END
+
+
+async def sub_add_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("Скасовано.")
+    return ConversationHandler.END
+
+
+def sub_add_conversation() -> ConversationHandler:
+    return ConversationHandler(
+        entry_points=[
+            CommandHandler("sub_add", sub_add_start),
+            CallbackQueryHandler(sub_add_start, pattern="^cmd_sub_add$"),
+        ],
+        states={
+            SUB_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, sub_add_name)],
+            SUB_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, sub_add_amount)],
+        },
+        fallbacks=[CommandHandler("cancel", sub_add_cancel)],
+    )
 
 
 # ── /goal ─────────────────────────────────────────────────────────────────────
@@ -562,6 +841,8 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         "cmd_income": income,
         "cmd_leads": leads,
         "cmd_pipeline": pipeline,
+        "cmd_expenses": expenses_cmd,
+        "cmd_subscriptions": subscriptions_cmd,
     }
     if cmd in cmd_map:
         await cmd_map[cmd](update, context)

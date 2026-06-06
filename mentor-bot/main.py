@@ -21,6 +21,8 @@ from handlers.commands import (
     ask_conversation,
     checkin_history,
     content_list,
+    expense_add_conversation,
+    expenses_cmd,
     follow_up,
     goal,
     help_cmd,
@@ -40,6 +42,9 @@ from handlers.commands import (
     start,
     status,
     streak,
+    sub_add_conversation,
+    sub_delete,
+    subscriptions_cmd,
 )
 from handlers.sales import (
     objection,
@@ -118,9 +123,13 @@ async def post_init(application: Application) -> None:
         BotCommand("setgoal", "Ціль місяця (wizard)"),
         BotCommand("month_review", "Аналіз місяця"),
         BotCommand("channels", "Підбір каналів залучення"),
-        BotCommand("income", "Дохід місяця"),
-        BotCommand("income_add", "Додати оплату"),
+        BotCommand("income", "Чистий прибуток місяця"),
+        BotCommand("income_add", "Додати оплату (+ витрати)"),
         BotCommand("income_history", "Історія доходів"),
+        BotCommand("expense_add", "Додати разову витрату"),
+        BotCommand("expenses", "Витрати місяця"),
+        BotCommand("subscriptions", "Підписки (додати/видалити)"),
+        BotCommand("sub_add", "Додати підписку"),
         BotCommand("goal", "Переглянути/змінити ціль"),
         BotCommand("leads", "Список лідів"),
         BotCommand("lead_add", "Додати ліда"),
@@ -170,6 +179,8 @@ def main() -> None:
         morning_conversation(),
         evening_conversation(),
         income_add_conversation(),
+        expense_add_conversation(),
+        sub_add_conversation(),
         lead_add_conversation(),
         proposal_conversation(),
         price_conversation(),
@@ -189,6 +200,9 @@ def main() -> None:
     app.add_handler(CommandHandler("help", help_cmd))
     app.add_handler(CommandHandler("income", income))
     app.add_handler(CommandHandler("income_history", income_history))
+    app.add_handler(CommandHandler("expenses", expenses_cmd))
+    app.add_handler(CommandHandler("subscriptions", subscriptions_cmd))
+    app.add_handler(CommandHandler("subs", subscriptions_cmd))
     app.add_handler(CommandHandler("goal", goal))
     app.add_handler(CommandHandler("leads", leads))
     app.add_handler(CommandHandler("lead_update", lead_update_list))
@@ -230,6 +244,9 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(meeting_confirm, pattern=r"^mtg_create$"))
     app.add_handler(CallbackQueryHandler(meeting_cancel, pattern=r"^mtg_cancel$"))
     app.add_handler(CallbackQueryHandler(meeting_delete, pattern=r"^mtgdel_\d+$"))
+    app.add_handler(CallbackQueryHandler(sub_delete, pattern=r"^subdel_\d+$"))
+    app.add_handler(CallbackQueryHandler(expenses_cmd, pattern=r"^cmd_expenses$"))
+    app.add_handler(CallbackQueryHandler(subscriptions_cmd, pattern=r"^cmd_subscriptions$"))
     app.add_handler(CallbackQueryHandler(menu_callback, pattern=r"^(cmd_|cancel)"))
 
     # Lowest-priority catch-all: free-text not consumed by a command or an

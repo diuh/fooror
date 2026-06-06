@@ -138,11 +138,33 @@ async def init_db() -> None:
                 created_at    TEXT NOT NULL DEFAULT (datetime('now'))
             );
 
+            CREATE TABLE IF NOT EXISTS expenses (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                amount       REAL NOT NULL,
+                category     TEXT,
+                description  TEXT,
+                expense_date TEXT NOT NULL,
+                month        TEXT NOT NULL,
+                income_id    INTEGER REFERENCES income_log(id) ON DELETE SET NULL,
+                source       TEXT NOT NULL DEFAULT 'manual'
+                             CHECK(source IN ('income','manual','subscription')),
+                created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS subscriptions (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                name       TEXT NOT NULL,
+                amount     REAL NOT NULL,
+                active     INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
             CREATE INDEX IF NOT EXISTS idx_leads_status    ON leads(status);
             CREATE INDEX IF NOT EXISTS idx_income_month    ON income_log(month);
             CREATE INDEX IF NOT EXISTS idx_daily_logs_date ON daily_logs(log_date, log_type);
             CREATE INDEX IF NOT EXISTS idx_tasks_date      ON tasks(task_date);
             CREATE INDEX IF NOT EXISTS idx_meetings_start  ON meetings(start_utc);
+            CREATE INDEX IF NOT EXISTS idx_expenses_month  ON expenses(month);
         """)
 
         # Migration: add horizon/period_key to pre-existing tasks tables and
@@ -238,6 +260,91 @@ async def get_recent_income_entries(limit: int = 5) -> list[dict]:
             "SELECT * FROM income_log ORDER BY created_at DESC LIMIT ?", (limit,)
         ) as cur:
             return [dict(r) for r in await cur.fetchall()]
+
+
+# ── Expenses ──────────────────────────────────────────────────────────────────
+
+async def add_expense(
+    amount: float,
+    category: str,
+    description: str = "",
+    expense_date: str | None = None,
+    income_id: int | None = None,
+    source: str = "manual",
+) -> int:
+    ed = expense_date or date.today().isoformat()
+    month = ed[:7]
+    async with get_db() as db:
+        cur = await db.execute(
+            """INSERT INTO expenses(amount, category, description, expense_date, month, income_id, source)
+               VALUES (?,?,?,?,?,?,?)""",
+            (amount, category, description, ed, month, income_id, source),
+        )
+        await db.commit()
+        return cur.lastrowid
+
+
+async def get_month_expenses(month: str | None = None) -> float:
+    m = month or date.today().strftime("%Y-%m")
+    async with get_db() as db:
+        async with db.execute(
+            "SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE month = ?", (m,)
+        ) as cur:
+            row = await cur.fetchone()
+            return float(row["total"])
+
+
+async def get_month_expense_rows(month: str | None = None) -> list[dict]:
+    m = month or date.today().strftime("%Y-%m")
+    async with get_db() as db:
+        async with db.execute(
+            "SELECT * FROM expenses WHERE month = ? ORDER BY expense_date, id", (m,)
+        ) as cur:
+            return [dict(r) for r in await cur.fetchall()]
+
+
+async def get_expenses_by_month() -> dict:
+    async with get_db() as db:
+        async with db.execute(
+            "SELECT month, SUM(amount) as total FROM expenses GROUP BY month"
+        ) as cur:
+            return {r["month"]: float(r["total"]) for r in await cur.fetchall()}
+
+
+# ── Subscriptions ─────────────────────────────────────────────────────────────
+
+async def add_subscription(name: str, amount: float) -> int:
+    async with get_db() as db:
+        cur = await db.execute(
+            "INSERT INTO subscriptions(name, amount) VALUES (?, ?)", (name, amount)
+        )
+        await db.commit()
+        return cur.lastrowid
+
+
+async def get_subscriptions(active_only: bool = True) -> list[dict]:
+    async with get_db() as db:
+        query = "SELECT * FROM subscriptions"
+        if active_only:
+            query += " WHERE active = 1"
+        query += " ORDER BY id"
+        async with db.execute(query) as cur:
+            return [dict(r) for r in await cur.fetchall()]
+
+
+async def get_subscriptions_total() -> float:
+    async with get_db() as db:
+        async with db.execute(
+            "SELECT COALESCE(SUM(amount),0) as total FROM subscriptions WHERE active = 1"
+        ) as cur:
+            row = await cur.fetchone()
+            return float(row["total"])
+
+
+async def delete_subscription(sub_id: int) -> None:
+    async with get_db() as db:
+        await db.execute("DELETE FROM subscriptions WHERE id = ?", (sub_id,))
+        await db.commit()
 
 
 # ── Leads ─────────────────────────────────────────────────────────────────────
@@ -703,8 +810,12 @@ async def build_context_snapshot() -> dict:
 
     goal = float(await get_config("monthly_goal") or 10000)
     month_income = await get_month_income(month)
-    pct = (month_income / goal * 100) if goal else 0
-    daily_pace = ((goal - month_income) / days_left) if days_left > 0 else 0
+    month_oneoff = await get_month_expenses(month)
+    subs_total = await get_subscriptions_total()
+    month_expenses = month_oneoff + subs_total
+    month_net = month_income - month_expenses
+    pct = (month_net / goal * 100) if goal else 0
+    daily_pace = ((goal - month_net) / days_left) if days_left > 0 else 0
 
     pipeline = await get_pipeline_summary()
     overdue = await get_overdue_leads()
@@ -725,6 +836,10 @@ async def build_context_snapshot() -> dict:
         "days_left": days_left,
         "goal": goal,
         "month_income": month_income,
+        "month_oneoff_expenses": month_oneoff,
+        "subscriptions_total": subs_total,
+        "month_expenses": month_expenses,
+        "month_net": month_net,
         "pct": pct,
         "daily_pace": daily_pace,
         "pipeline": pipeline,

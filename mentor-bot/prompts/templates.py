@@ -214,7 +214,9 @@ MONTH_ANALYSIS_TEMPLATE = """Зроби аналіз місяця {month}, що 
 {context_block}
 
 Підсумок місяця:
-- Дохід: ${month_income:,.0f} / Ціль: ${goal:,.0f} ({pct:.0f}%)
+- Оборот: ${month_income:,.0f}
+- Витрати: ${month_expenses:,.0f}
+- Чистий прибуток: ${month_net:,.0f} / Ціль: ${goal:,.0f} ({pct:.0f}%)
 - Задачі виконано: {tasks_done}/{tasks_total}
 - Закрито угод: {closed_deals}
 - Streak check-in: {streak} дн.
