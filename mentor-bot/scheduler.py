@@ -7,7 +7,7 @@ KYIV_TZ = pytz.timezone("Europe/Kyiv")
 
 
 def register_jobs(app: Application) -> None:
-    from handlers.checkin import morning_job, evening_job
+    from handlers.checkin import morning_job, evening_job, followup_reminder_job
     from handlers.tasks import midday_reminder_job, month_end_job, month_start_job
     from handlers.meetings import meeting_reminder_job
 
@@ -26,6 +26,11 @@ def register_jobs(app: Application) -> None:
         callback=morning_job,
         time=time(10, 0, tzinfo=KYIV_TZ),
         name="morning_checkin",
+    )
+    app.job_queue.run_daily(
+        callback=followup_reminder_job,
+        time=time(9, 30, tzinfo=KYIV_TZ),
+        name="followup_reminder",
     )
     app.job_queue.run_daily(
         callback=midday_reminder_job,
@@ -48,6 +53,12 @@ def register_jobs(app: Application) -> None:
         days=(0,),
         name="weekly_content",
     )
+    app.job_queue.run_daily(
+        callback=weekly_review_nudge,
+        time=time(19, 0, tzinfo=KYIV_TZ),
+        days=(6,),
+        name="weekly_review_nudge",
+    )
 
 
 async def weekly_content_reminder(context) -> None:
@@ -58,4 +69,15 @@ async def weekly_content_reminder(context) -> None:
     await context.bot.send_message(
         chat_id=int(chat_id),
         text="📅 Початок тижня! Час скласти контент-план.\n\nВідправ /weekly_plan",
+    )
+
+
+async def weekly_review_nudge(context) -> None:
+    import database as db
+    chat_id = await db.get_config("user_telegram_id")
+    if not chat_id:
+        return
+    await context.bot.send_message(
+        chat_id=int(chat_id),
+        text="📊 Кінець тижня — час підвести підсумки.\n\n/review_week",
     )

@@ -81,7 +81,10 @@ from handlers.agent import (
     action_cancel,
     action_confirm,
     agent_text_handler,
+    undo_last,
 )
+from handlers.checkin import rollover_confirm
+from handlers.voice import voice_handler
 
 logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -256,9 +259,14 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(sub_delete, pattern=r"^subdel_\d+$"))
     app.add_handler(CallbackQueryHandler(action_confirm, pattern=r"^act_confirm$"))
     app.add_handler(CallbackQueryHandler(action_cancel, pattern=r"^act_cancel$"))
+    app.add_handler(CallbackQueryHandler(undo_last, pattern=r"^undo_last$"))
+    app.add_handler(CallbackQueryHandler(rollover_confirm, pattern=r"^rollover_(yes|no)$"))
     app.add_handler(CallbackQueryHandler(expenses_cmd, pattern=r"^cmd_expenses$"))
     app.add_handler(CallbackQueryHandler(subscriptions_cmd, pattern=r"^cmd_subscriptions$"))
     app.add_handler(CallbackQueryHandler(menu_callback, pattern=r"^(cmd_|cancel)"))
+
+    # Voice/audio messages → transcribed via Groq Whisper → agent handler.
+    app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, voice_handler))
 
     # Lowest-priority catch-all: free text not consumed by a command or an
     # active conversation goes to the AI agent, which decides whether to call a

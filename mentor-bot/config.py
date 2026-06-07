@@ -15,6 +15,7 @@ class Config:
     google_client_secret: str | None = None
     google_refresh_token: str | None = None
     google_calendar_id: str = "primary"
+    groq_api_key: str = ""
 
     @property
     def persistence_path(self) -> str:
@@ -44,6 +45,7 @@ class Config:
             google_client_secret=os.environ.get("GOOGLE_CLIENT_SECRET"),
             google_refresh_token=os.environ.get("GOOGLE_REFRESH_TOKEN"),
             google_calendar_id=os.environ.get("GOOGLE_CALENDAR_ID", "primary"),
+            groq_api_key=os.environ.get("GROQ_API_KEY", ""),
         )
 
 

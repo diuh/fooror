@@ -806,6 +806,28 @@ async def cancel_meeting(meeting_id: int) -> dict | None:
         return dict(row)
 
 
+async def update_meeting(meeting_id: int, **fields: Any) -> None:
+    if not fields:
+        return
+    set_clause = ", ".join(f"{k} = ?" for k in fields)
+    values = list(fields.values()) + [meeting_id]
+    async with get_db() as db:
+        await db.execute(f"UPDATE meetings SET {set_clause} WHERE id = ?", values)
+        await db.commit()
+
+
+async def delete_income(income_id: int) -> None:
+    async with get_db() as db:
+        await db.execute("DELETE FROM income_log WHERE id = ?", (income_id,))
+        await db.commit()
+
+
+async def delete_expense(expense_id: int) -> None:
+    async with get_db() as db:
+        await db.execute("DELETE FROM expenses WHERE id = ?", (expense_id,))
+        await db.commit()
+
+
 # ── Context Snapshot ──────────────────────────────────────────────────────────
 
 async def build_context_snapshot() -> dict:

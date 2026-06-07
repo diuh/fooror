@@ -111,3 +111,42 @@ def _delete_sync(event_id: str) -> None:
 async def delete_event(event_id: str) -> None:
     """Delete a calendar event and notify attendees. Raises on API failure."""
     await asyncio.to_thread(_delete_sync, event_id)
+
+
+def _list_sync(time_min: str, time_max: str) -> list[dict]:
+    result = (
+        _get_service()
+        .events()
+        .list(
+            calendarId=config.google_calendar_id,
+            timeMin=time_min,
+            timeMax=time_max,
+            singleEvents=True,
+            orderBy="startTime",
+        )
+        .execute()
+    )
+    return result.get("items", [])
+
+
+async def list_events(time_min: str, time_max: str) -> list[dict]:
+    """List events in [time_min, time_max). Both must be RFC3339 strings (e.g. ending in 'Z').
+    Returns raw Google Calendar event dicts."""
+    return await asyncio.to_thread(_list_sync, time_min, time_max)
+
+
+def _update_sync(event_id: str, start_iso: str, end_iso: str, tz: str) -> None:
+    body = {
+        "start": {"dateTime": start_iso, "timeZone": tz},
+        "end": {"dateTime": end_iso, "timeZone": tz},
+    }
+    _get_service().events().patch(
+        calendarId=config.google_calendar_id,
+        eventId=event_id,
+        body=body,
+    ).execute()
+
+
+async def update_event(event_id: str, start_iso: str, end_iso: str, tz: str) -> None:
+    """Patch start/end time of an existing event. Raises on API failure."""
+    await asyncio.to_thread(_update_sync, event_id, start_iso, end_iso, tz)

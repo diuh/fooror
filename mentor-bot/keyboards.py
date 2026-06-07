@@ -178,6 +178,19 @@ def meetings_keyboard(meetings: list[dict]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(rows)
 
 
+def rollover_keyboard(n: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton(f"✅ Перенести {n}", callback_data="rollover_yes"),
+        InlineKeyboardButton("❌ Ні", callback_data="rollover_no"),
+    ]])
+
+
+def undo_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("↩️ Скасувати", callback_data="undo_last"),
+    ]])
+
+
 def goal_confirm_keyboard(suggested: float | None) -> InlineKeyboardMarkup:
     rows = []
     if suggested:

@@ -1,5 +1,5 @@
 import json
-from datetime import date
+from datetime import date, timedelta
 
 from telegram import Update
 from telegram.ext import (
@@ -294,6 +294,45 @@ async def evening_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         text=f"🌆 {ai_msg}\n\nВідправ /evening щоб підбити підсумок дня.",
         parse_mode="HTML",
     )
+
+    # Offer to roll over incomplete day tasks to tomorrow.
+    pending = await db.get_pending_tasks(today(), "day")
+    if pending:
+        n = len(pending)
+        context.application.bot_data["rollover_tasks"] = [r["title"] for r in pending]
+        await context.bot.send_message(
+            chat_id=int(chat_id),
+            text=f"📋 Незавершено сьогодні: <b>{n}</b> задач. Перенести на завтра?",
+            parse_mode="HTML",
+            reply_markup=keyboards.rollover_keyboard(n),
+        )
+
+
+async def rollover_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    titles = context.application.bot_data.pop("rollover_tasks", [])
+    if query.data == "rollover_yes" and titles:
+        tomorrow = (date.today() + timedelta(days=1)).isoformat()
+        await db.add_tasks(tomorrow, titles, source="rollover", horizon="day")
+        await query.edit_message_text(f"✅ {len(titles)} задач перенесено на завтра.")
+    else:
+        await query.edit_message_text("Зрозумів, лишаємо як є.")
+
+
+async def followup_reminder_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = await db.get_config("user_telegram_id")
+    if not chat_id:
+        return
+    overdue = await db.get_overdue_leads()
+    if not overdue:
+        return
+    lines = ["🔔 <b>Follow-up сьогодні:</b>\n"]
+    for lead in overdue[:5]:
+        action = lead.get("next_action") or "без нотатки"
+        lines.append(f"• <b>{lead['name']}</b> — {action}")
+    lines.append("\n/leads щоб оновити статус")
+    await context.bot.send_message(int(chat_id), "\n".join(lines), parse_mode="HTML")
 
 
 # ── ConversationHandlers ──────────────────────────────────────────────────────

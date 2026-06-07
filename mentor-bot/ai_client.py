@@ -135,6 +135,14 @@ async def run_agent(
     messages: list[dict] = list(history or [])
     messages.append({"role": "user", "content": user_message})
 
+    # Mark the last tool schema for prompt caching — the tools array is static
+    # across calls so Anthropic can cache it and skip re-tokenising each turn.
+    if tools:
+        cached_tools = [t.copy() for t in tools]
+        cached_tools[-1] = {**cached_tools[-1], "cache_control": {"type": "ephemeral"}}
+    else:
+        cached_tools = tools
+
     client = get_client()
     async with _typing(bot, chat_id):
         for _ in range(max_turns):
@@ -143,7 +151,7 @@ async def run_agent(
                     model=MODEL_FAST,
                     max_tokens=1500,
                     system=system_blocks,
-                    tools=tools,
+                    tools=cached_tools,
                     messages=messages,
                 )
             except (anthropic.APIStatusError, anthropic.APITimeoutError):
