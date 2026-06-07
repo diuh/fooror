@@ -215,6 +215,21 @@ async def set_config(key: str, value: str) -> None:
         await db.commit()
 
 
+async def get_brand_profile() -> dict | None:
+    raw = await get_config("brand_profile")
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+        return data if isinstance(data, dict) else None
+    except (json.JSONDecodeError, ValueError):
+        return None
+
+
+async def set_brand_profile(profile: dict) -> None:
+    await set_config("brand_profile", json.dumps(profile, ensure_ascii=False))
+
+
 # ── Income ────────────────────────────────────────────────────────────────────
 
 async def add_income(amount: float, description: str, payment_date: str | None = None, lead_id: int | None = None) -> int:
@@ -875,6 +890,7 @@ async def build_context_snapshot() -> dict:
         })
     subscriptions = await get_subscriptions()
     content_plan = await get_config("content_plan")
+    brand_profile = await get_brand_profile()
 
     return {
         "today": today.isoformat(),
@@ -884,6 +900,7 @@ async def build_context_snapshot() -> dict:
         "upcoming_meetings": upcoming_meetings,
         "subscriptions": subscriptions,
         "content_plan": content_plan,
+        "brand_profile": brand_profile,
         "goal": goal,
         "month_income": month_income,
         "month_oneoff_expenses": month_oneoff,

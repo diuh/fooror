@@ -57,6 +57,7 @@ from handlers.sales import (
 )
 from handlers.content import (
     brand,
+    brand_setup_conversation,
     post_idea_conversation,
     weekly_plan_conversation,
 )
@@ -154,6 +155,7 @@ async def post_init(application: Application) -> None:
         BotCommand("post_idea", "Ідея для посту"),
         BotCommand("weekly_plan", "Контент-план на тиждень"),
         BotCommand("brand", "Порада по бренду"),
+        BotCommand("brand_setup", "Налаштувати бренд-профіль"),
         BotCommand("content_list", "Збережені ідеї"),
         BotCommand("checkin_history", "Останні check-in"),
         BotCommand("streak", "Серія check-in"),
@@ -199,6 +201,7 @@ def main() -> None:
         ask_conversation(),
         post_idea_conversation(),
         weekly_plan_conversation(),
+        brand_setup_conversation(),
         plan_day_conversation(),
         setgoal_conversation(),
         channels_conversation(),

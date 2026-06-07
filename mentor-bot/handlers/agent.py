@@ -127,6 +127,20 @@ TOOLS = [
         },
     },
     {
+        "name": "update_brand_profile",
+        "description": "Оновити поля бренд-профілю (ніша, ідеальний клієнт, POV, голос, рубрики). Передавай лише ті поля, які треба змінити.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "niche": {"type": "string"},
+                "ideal_client": {"type": "string"},
+                "pov": {"type": "string", "description": "сильна думка/контрар'ян"},
+                "voice": {"type": "string", "description": "голос/тон"},
+                "pillars": {"type": "array", "items": {"type": "string"}, "description": "контент-рубрики"},
+            },
+        },
+    },
+    {
         "name": "get_overview",
         "description": "Отримати поточний дашборд: чистий прибуток, задачі, зустрічі, прострочені ліди.",
         "input_schema": {"type": "object", "properties": {}},
@@ -462,6 +476,17 @@ async def _execute_tool_inner(
         await db.set_config("content_plan", str(args.get("text") or ""))
         context.user_data["last_content_plan"] = str(args.get("text") or "")
         return {"result": "Контент-план оновлено.", "stop": False}
+
+    if name == "update_brand_profile":
+        profile = await db.get_brand_profile() or {}
+        for field in ("niche", "ideal_client", "pov", "voice"):
+            if args.get(field):
+                profile[field] = str(args[field]).strip()
+        if args.get("pillars"):
+            profile["pillars"] = [str(p).strip() for p in args["pillars"] if str(p).strip()]
+        await db.set_brand_profile(profile)
+        changed = ", ".join(k for k in ("niche", "ideal_client", "pov", "voice", "pillars") if args.get(k))
+        return {"result": f"Бренд-профіль оновлено ({changed}).", "stop": False}
 
     # ── read / overview ──
     if name == "get_overview":

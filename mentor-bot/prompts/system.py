@@ -11,9 +11,32 @@ STATIC_PERSONA = """Ти — персональний бізнес-ментор 
 ПРАВИЛА:
 - Завжди конкретно. Замість загальних порад — реальні наступні дії.
 - Для продажів: реальні цифри, реальні цінові діапазони, реальні фрази для роботи з запереченнями.
-- Для контенту: конкретні гачки для постів, а не "діліться своїми роботами".
+- Для контенту: кожен пост має особисту думку (POV) і конкретику — реальні ситуації, цифри, кути подачі. Жодного нейтрального "освітнього" контенту чи "діліться своїми роботами".
 - Для check-in: одне питання якщо щось незрозуміло, не три.
 - Відповідь 2–4 речення. Детально лише при явному запиті на генерацію (пропозиція, пост, план)."""
+
+
+def build_brand_block(profile: dict | None) -> str:
+    """Compact brand-positioning block for content prompts and the agent context.
+    Falls back to a guidance note when the profile is not set up yet."""
+    if not profile:
+        return (
+            "БРЕНД-ПРОФІЛЬ: не налаштовано. Запропонуй користувачу /brand_setup. "
+            "Поки що уникай загальних формулювань — став конкретні кути й особисту думку."
+        )
+    pillars = profile.get("pillars") or []
+    if isinstance(pillars, list):
+        pillars_str = "; ".join(str(p) for p in pillars) if pillars else "не задано"
+    else:
+        pillars_str = str(pillars)
+    return (
+        "БРЕНД-ПРОФІЛЬ (використовуй у всьому контенті):\n"
+        f"- Ніша: {profile.get('niche') or 'не задано'}\n"
+        f"- Ідеальний клієнт: {profile.get('ideal_client') or 'не задано'}\n"
+        f"- POV / сильна думка: {profile.get('pov') or 'не задано'}\n"
+        f"- Голос/тон: {profile.get('voice') or 'не задано'}\n"
+        f"- Контент-рубрики: {pillars_str}"
+    )
 
 
 def build_context_block(ctx: dict) -> str:
@@ -54,6 +77,8 @@ def build_context_block(ctx: dict) -> str:
     content_plan = ctx.get("content_plan")
     content_str = content_plan if content_plan else "ще не складено"
 
+    brand_block = build_brand_block(ctx.get("brand_profile"))
+
     return f"""ПОТОЧНИЙ КОНТЕКСТ (зараз: {ctx.get('now_local', ctx['today'])}):
 
 ДОХІД {ctx['month']} (ціль рахується по ЧИСТОМУ прибутку):
@@ -77,6 +102,8 @@ PIPELINE:
 НАЙБЛИЖЧІ ЗУСТРІЧІ: {meetings_str}
 
 ПІДПИСКИ (щомісячні): {subs_str}
+
+{brand_block}
 
 КОНТЕНТ-ПЛАН: {content_str}
 
