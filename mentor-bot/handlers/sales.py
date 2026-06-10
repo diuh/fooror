@@ -11,7 +11,7 @@ from telegram.ext import (
 import ai_client
 import database as db
 import keyboards
-from formatters import split_message
+from formatters import md_to_html, split_message
 from prompts.templates import (
     OBJECTION_TEMPLATE,
     OUTREACH_TEMPLATE,
@@ -117,7 +117,7 @@ async def _generate_proposal(update_or_query, context, budget: str) -> int:
         "proposal_text": proposal_text,
     }
     for part in split_message(proposal_text):
-        await msg.reply_text(part)
+        await msg.reply_text(md_to_html(part), parse_mode="HTML")
     await msg.reply_text(
         "Зберегти пропозицію?",
         reply_markup=keyboards.save_cancel_keyboard("save_proposal"),
@@ -217,7 +217,7 @@ async def price_desc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     )
     answer = await ai_client.ask(prompt, ctx, bot=context.bot, chat_id=update.effective_chat.id)
     for part in split_message(answer):
-        await update.message.reply_text(part)
+        await update.message.reply_text(md_to_html(part), parse_mode="HTML")
     return ConversationHandler.END
 
 
@@ -274,7 +274,7 @@ async def outreach_platform(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         language="українська",
     )
     answer = await ai_client.ask(prompt, ctx, bot=context.bot, chat_id=update.callback_query.message.chat_id)
-    await update.callback_query.message.reply_text(answer)
+    await update.callback_query.message.reply_text(md_to_html(answer), parse_mode="HTML")
     return ConversationHandler.END
 
 
@@ -309,7 +309,7 @@ async def objection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         context="веб-дизайн/розробка сайтів",
     )
     answer = await ai_client.ask(prompt, ctx, bot=context.bot, chat_id=update.effective_chat.id)
-    await update.message.reply_text(answer)
+    await update.message.reply_text(md_to_html(answer), parse_mode="HTML")
 
 
 # ── /pitch ────────────────────────────────────────────────────────────────────
@@ -322,4 +322,4 @@ async def pitch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         ctx,
         bot=context.bot, chat_id=update.effective_chat.id,
     )
-    await update.message.reply_text(answer)
+    await update.message.reply_text(md_to_html(answer), parse_mode="HTML")

@@ -22,6 +22,7 @@ from formatters import (
     format_pipeline,
     income_bar,
     income_breakdown,
+    md_to_html,
     split_message,
 )
 
@@ -840,7 +841,7 @@ async def ask_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             ctx = await db.build_context_snapshot()
             answer = await ai_client.ask(question, ctx, bot=context.bot, chat_id=update.effective_chat.id)
             for part in split_message(answer):
-                await update.message.reply_text(part)
+                await update.message.reply_text(md_to_html(part), parse_mode="HTML")
             return ConversationHandler.END
         await update.message.reply_text("Запитай ментора:")
     return ASK_STATE
@@ -850,7 +851,7 @@ async def ask_question(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     ctx = await db.build_context_snapshot()
     answer = await ai_client.ask(update.message.text, ctx, bot=context.bot, chat_id=update.effective_chat.id)
     for part in split_message(answer):
-        await update.message.reply_text(part)
+        await update.message.reply_text(md_to_html(part), parse_mode="HTML")
     return ConversationHandler.END
 
 
@@ -885,7 +886,7 @@ async def review_week(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     )
     answer = await ai_client.ask_long(prompt, ctx, bot=context.bot, chat_id=update.effective_chat.id)
     for part in split_message(answer):
-        await update.message.reply_text(part)
+        await update.message.reply_text(md_to_html(part), parse_mode="HTML")
 
 
 # ── /motivate ─────────────────────────────────────────────────────────────────
@@ -895,7 +896,7 @@ async def motivate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     ctx = await db.build_context_snapshot()
     prompt = MOTIVATE_TEMPLATE.format(context_block="(дивись у системному контексті)")
     answer = await ai_client.ask(prompt, ctx, bot=context.bot, chat_id=update.effective_chat.id)
-    await update.message.reply_text(answer)
+    await update.message.reply_text(md_to_html(answer), parse_mode="HTML")
 
 
 # ── /content_list ─────────────────────────────────────────────────────────────

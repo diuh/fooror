@@ -11,7 +11,7 @@ from telegram.ext import (
 import ai_client
 import database as db
 import keyboards
-from formatters import split_message
+from formatters import md_to_html, split_message
 from prompts.system import build_brand_block
 from prompts.templates import (
     BRAND_TEMPLATE,
@@ -90,7 +90,7 @@ async def _generate_post(update_or_query, context, extra: str) -> int:
     await db.add_content_idea(platform=platform, title=title_line, body=answer)
 
     for part in split_message(answer):
-        await msg.reply_text(part)
+        await msg.reply_text(md_to_html(part), parse_mode="HTML")
     return ConversationHandler.END
 
 
@@ -218,7 +218,7 @@ async def _generate_weekly(msg, context) -> int:
     context.user_data["last_content_plan"] = answer
     await db.set_config("content_plan", answer)
     for part in split_message(answer):
-        await msg.reply_text(part)
+        await msg.reply_text(md_to_html(part), parse_mode="HTML")
     return ConversationHandler.END
 
 
@@ -256,7 +256,7 @@ async def brand(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     prompt = BRAND_TEMPLATE.format(context_block=build_context_block(ctx))
     answer = await ai_client.ask_long(prompt, ctx, bot=context.bot, chat_id=update.effective_chat.id)
     for part in split_message(answer):
-        await update.message.reply_text(part)
+        await update.message.reply_text(md_to_html(part), parse_mode="HTML")
     await update.message.reply_text(
         "💡 Щоб бот памʼятав твоє позиціонування й використовував його у кожному "
         "контент-плані — збережи бренд-профіль: /brand_setup"

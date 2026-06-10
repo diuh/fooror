@@ -14,7 +14,7 @@ from telegram.ext import (
 import ai_client
 import database as db
 import keyboards
-from formatters import income_bar, split_message
+from formatters import income_bar, md_to_html, split_message
 from prompts.templates import (
     CHANNELS_TEMPLATE,
     DAILY_PLAN_TEMPLATE,
@@ -448,7 +448,7 @@ async def setgoal_q3(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["goal_rationale"] = answer
 
     for part in split_message(answer):
-        await update.message.reply_text(part)
+        await update.message.reply_text(md_to_html(part), parse_mode="HTML")
     await update.message.reply_text(
         "Яку ціль ставимо?",
         reply_markup=keyboards.goal_confirm_keyboard(suggested),
@@ -554,7 +554,7 @@ async def month_review(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         ctx, ctx["month"], bot=context.bot, chat_id=update.effective_chat.id
     )
     for part in split_message(answer):
-        await update.message.reply_text(part)
+        await update.message.reply_text(md_to_html(part), parse_mode="HTML")
     await update.message.reply_text("Готовий поставити ціль на наступний місяць? /setgoal")
 
 
@@ -609,7 +609,7 @@ async def channels_q3(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     )
     answer = await ai_client.ask_long(prompt, ctx, bot=context.bot, chat_id=update.effective_chat.id)
     for part in split_message(answer):
-        await update.message.reply_text(part)
+        await update.message.reply_text(md_to_html(part), parse_mode="HTML")
     return ConversationHandler.END
 
 
@@ -707,7 +707,7 @@ async def month_end_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     )
     answer = await _run_month_analysis(ctx, ctx["month"], bot=context.bot, chat_id=int(chat_id))
     for part in split_message(answer):
-        await context.bot.send_message(chat_id=int(chat_id), text=part)
+        await context.bot.send_message(chat_id=int(chat_id), text=md_to_html(part), parse_mode="HTML")
     await context.bot.send_message(
         chat_id=int(chat_id),
         text="Поставимо ціль на наступний місяць з урахуванням цих результатів? /setgoal",

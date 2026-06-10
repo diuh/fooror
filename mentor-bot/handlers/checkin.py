@@ -14,7 +14,7 @@ from telegram.ext import (
 import ai_client
 import database as db
 import keyboards
-from formatters import income_bar
+from formatters import income_bar, md_to_html
 from prompts.templates import MORNING_TEMPLATE, EVENING_TEMPLATE
 
 MORNING_PLAN, MORNING_BLOCKER = range(2)
@@ -49,7 +49,7 @@ async def morning_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         context_block=f"Прогрес: {bar}{overdue_note}",
     )
     ai_msg = await ai_client.ask(prompt, ctx, bot=context.bot, chat_id=update.effective_chat.id)
-    full_msg = f"🌅 <b>Ранковий check-in</b>\n\n{ai_msg}\n\nЩо плануєш зробити сьогодні?"
+    full_msg = f"🌅 <b>Ранковий check-in</b>\n\n{md_to_html(ai_msg)}\n\nЩо плануєш зробити сьогодні?"
     await _send_or_reply(update, full_msg, parse_mode="HTML")
     return MORNING_PLAN
 
@@ -92,7 +92,7 @@ async def morning_blocker(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         tasks_planned=json.dumps([plan]),
         ai_response=ai_response,
     )
-    await update.message.reply_text(f"✅ {ai_response}")
+    await update.message.reply_text(f"✅ {md_to_html(ai_response)}", parse_mode="HTML")
 
     # Show the synced day's tasks so the plan is actionable right away.
     import keyboards
@@ -133,7 +133,7 @@ async def evening_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         if pending:
             tasks_line += "\nЗалишилось: " + "; ".join(pending)
 
-    full_msg = f"🌆 <b>Вечірній check-in</b>\n\n{ai_msg}{tasks_line}\n\nЩо вдалось зробити сьогодні?"
+    full_msg = f"🌆 <b>Вечірній check-in</b>\n\n{md_to_html(ai_msg)}{tasks_line}\n\nЩо вдалось зробити сьогодні?"
     await _send_or_reply(update, full_msg, parse_mode="HTML")
     return EVENING_REVIEW
 
@@ -196,7 +196,7 @@ async def evening_mood(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     )
     streak = await db.get_streak()
     streak_str = f"\n\n🔥 Streak: {streak} дн." if streak > 1 else ""
-    await query.message.reply_text(f"🌙 {ai_response}{streak_str}")
+    await query.message.reply_text(f"🌙 {md_to_html(ai_response)}{streak_str}", parse_mode="HTML")
     return ConversationHandler.END
 
 
@@ -225,7 +225,7 @@ async def morning_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     ai_msg = await ai_client.ask(prompt, ctx, bot=context.bot, chat_id=int(chat_id))
     await context.bot.send_message(
         chat_id=int(chat_id),
-        text=f"🌅 <b>Доброго ранку!</b>\n\n{ai_msg}",
+        text=f"🌅 <b>Доброго ранку!</b>\n\n{md_to_html(ai_msg)}",
         parse_mode="HTML",
     )
 
@@ -291,7 +291,7 @@ async def evening_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     )
     await context.bot.send_message(
         chat_id=int(chat_id),
-        text=f"🌆 {ai_msg}\n\nВідправ /evening щоб підбити підсумок дня.",
+        text=f"🌆 {md_to_html(ai_msg)}\n\nВідправ /evening щоб підбити підсумок дня.",
         parse_mode="HTML",
     )
 

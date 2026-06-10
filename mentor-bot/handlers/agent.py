@@ -18,7 +18,7 @@ import database as db
 import gcal_client
 import keyboards
 from config import config
-from formatters import income_bar, income_breakdown, split_message
+from formatters import income_bar, income_breakdown, md_to_html, split_message
 from handlers.tasks import format_tasks_text, month_key, today, week_key
 from handlers import meetings
 
@@ -817,7 +817,7 @@ async def _handle_text(text: str, update: Update, context: ContextTypes.DEFAULT_
     if final and final.strip():
         _remember(context, "assistant", final)
         for part in split_message(final):
-            await update.message.reply_text(part)
+            await update.message.reply_text(md_to_html(part), parse_mode="HTML")
     else:
         await update.message.reply_text("Готово ✅")
 
