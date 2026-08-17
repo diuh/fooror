@@ -98,6 +98,27 @@ design-strategy-course/
 │   ├── 03-trendwatching.md
 │   ├── 04-audience-persona.md
 │   └── 05-design-strategy.md
+├── lessons/               ← посценарна розкладка відеоуроків
+│   ├── small-talk-slides.md
+│   └── brief-storytelling-slides.md
 └── ai/
     └── prompts-cheatsheet.md
+
+.claude/skills/            ← скіли Claude Code (у корені репозиторію)
+├── README.md
+├── small-talk-generator/
+└── brief-generator/
 ```
+
+---
+
+## Скіли Claude Code
+
+Модуль 1 має два скіли, які студент запускає простим промптом замість копіювання довгих інструкцій:
+
+| Скіл | Промпт | Результат |
+|---|---|---|
+| `small-talk-generator` | `Small Talk для [проєкт, ніша]` | Сценарій першого дзвінка |
+| `brief-generator` | `бриф для [проєкт, ніша]` | Питання брифінгу по 4 секціях із колонкою «навіщо» |
+
+Вони працюють у парі: якщо Small Talk уже згенеровано в тому ж чаті, бриф **не повторює його питань** — замість них зʼявляється блок уточнень («клієнт уже сказав → що добираємо цифрами»). Деталі й встановлення — у `.claude/skills/README.md`.
