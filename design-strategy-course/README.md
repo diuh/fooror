@@ -99,6 +99,7 @@ design-strategy-course/
 │   ├── 04-audience-persona.md
 │   └── 05-design-strategy.md
 ├── lessons/               ← посценарна розкладка відеоуроків
+│   ├── intro-slides.md
 │   ├── small-talk-slides.md
 │   └── brief-storytelling-slides.md
 └── ai/
