@@ -84,7 +84,9 @@ its left, and the whole field drifted down and to the right.
   the loop never builds a string.
 - The luminance and density maps are recomputed only when the source changes — and
   for video and camera, only every third frame.
-- Comfortable defaults are 18,000 dots at 2 sub-steps. 60,000 dots at 4 sub-steps is
+- Ships at 21,000 dots, 4.5px, 2 sub-steps — a bold, poster-like setting where the
+  dots merge into solid black in the shadows. For a finer, more classical stipple,
+  drop the dot size toward 1.5 and raise the damping. 60,000 dots at 4 sub-steps is
   the heavy end and is meant as a quality ceiling, not a default.
 
 ## Notes
