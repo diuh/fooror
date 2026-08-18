@@ -92,7 +92,14 @@ its left, and the whole field drifted down and to the right.
 - Match the dot count to the source. A picture with a small dark subject on a large
   light field cannot absorb 60,000 dots; the surplus has nowhere legitimate to sit and
   shows up as haze. Drop the count, or raise the contrast, and it cleans up.
-- Camera input needs a secure context. It works from `localhost` or `https://`, but
-  most browsers block `getUserMedia` on `file://`.
+- **Camera input needs the page to own the camera permission.** It works when
+  `index.html` is opened directly over `https://` or `http://localhost` — for example
+  `python3 -m http.server` in this folder, then `http://localhost:8000`. It cannot work
+  when the sketch is embedded in someone else's page: a cross-origin or sandboxed
+  iframe gets no camera unless the embedder sets `allow="camera"`, and the sketch
+  cannot grant that to itself. The Start camera button is disabled up front in that
+  case and says so. Some browsers also refuse `getUserMedia` on `file://`.
+- Camera failures are reported specifically — permission refused, no device attached,
+  device busy, or blocked by the embedding page — rather than as a raw error string.
 - Video files are decoded by the browser, so the supported formats are whatever the
   browser supports (mp4/H.264 and webm in practice).
