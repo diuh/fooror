@@ -13,6 +13,14 @@ Single self-contained file, no build step and no dependencies. Open
 | Control | What it does |
 | --- | --- |
 | **Image / Video / Camera** | Input mode. Image and Video take a file; Camera asks for `getUserMedia` access. You can also drop an image or video anywhere on the canvas. |
+| **Subject: Off / Plate / Focus / Center** | Which part of the source is allowed to hold dots. See *Isolating a subject* below. |
+| **Capture background** | Plate mode only. Counts down three seconds, then freezes the current frame as the reference background. |
+| **Cutoff / Edge softness** | Matte threshold and how hard its edge is. In Center mode, cutoff is the radius. |
+| **Show matte** | Tints the dropped region so the matte can be tuned by eye. The readout beside it says how much of the frame is kept. |
+| **Export 1× / 2× / 4×** | Multiplier for the PNG export, relative to the on-screen size. |
+| **PNG** | Saves what you see, re-rendered at the chosen scale. |
+| **HTML** | Saves a standalone copy of this sketch with the current settings as its defaults. |
+| **Copy settings** | The current parameters as a JS object literal. |
 | **Dot count** | Particle count, 500–60,000. Resizes live: growing seeds the new dots from the density field without disturbing the ones already placed. |
 | **Dot size** | Side length of each square dot, in CSS pixels. |
 | **Dot color** | Fill color in mono mode. |
@@ -25,6 +33,57 @@ Single self-contained file, no build step and no dependencies. Open
 | **Damping** | Per-frame velocity decay. Low values settle fast; high values keep the field churning. |
 | **Sim steps / frame** | Physics sub-steps per animation frame. More steps is smoother and more stable, and costs proportionally more. |
 | **Pause / Reseed** | Space toggles play/pause, `R` re-runs the CDF sampling from scratch. |
+
+## Isolating a subject
+
+The goal is the iPhone effect: only the person in front of the camera becomes
+dots, everything behind them drops out. What the phone does is *semantic
+segmentation* — a neural network that knows what a person is. It does not look
+at focus, and it needs a model of a few megabytes. Nothing here loads a model:
+the file stays self-contained, and an artifact-hosted copy could not fetch one
+anyway. So the sketch offers three cheap proxies instead, each good in a
+different situation.
+
+**Plate** — background subtraction. Point a fixed camera at the empty scene,
+press *Capture background*, step in. Every pixel is compared to the reference
+frame in RGB; what changed is the subject. Two blur passes close the small holes
+where a subject happens to match the wall behind it, and feather the silhouette.
+This is the one to use for a webcam: it is exact, instant, and gives a crisper
+edge than a segmentation model would. It needs the camera and the lighting to
+hold still — bump the tripod and you re-capture.
+
+**Focus** — local high-frequency energy. An in-focus region carries fine detail;
+a defocused one is smooth. Blur that detail map into regions and threshold it.
+This works on photographs that already have real depth of field — a portrait
+from a phone or an SLR. It will not help with a webcam, which has everything in
+focus from 30cm to the far wall, and it will not help with a flat graphic.
+
+**Center** — a radial falloff. No subject detection at all, just a spotlight.
+Useful when neither of the others applies and you want the frame to fade out.
+
+The matte multiplies the density field, so a dropped region holds no dots at
+all rather than fewer — the CDF floor is masked too. If a matte ends up keeping
+nothing, seeding falls back to uniform placement and the stray recycler stands
+down, so the sketch degrades quietly instead of piling every dot in one corner.
+
+## Exporting
+
+**PNG** re-renders the current frame into an offscreen canvas at 1×, 2× or 4× the
+on-screen size — 4× on a large window is around 3600px square, enough to print.
+
+**HTML** writes a standalone copy of the whole sketch with the current settings
+baked in as its defaults, so you can hand someone a single file that opens
+looking exactly like your screen. It is rebuilt from the sketch's own style,
+markup and script rather than from `document.outerHTML`, so nothing belonging to
+an embedding host is carried along, and the transient UI state (which input mode
+you were in, what the hints said) is reset in the copy.
+
+**Copy settings** gives the parameters alone, as a JS object literal.
+
+An embedded copy of the page — the artifact viewer, or any cross-origin iframe —
+cannot start a download; the host sandbox drops it silently. There the export
+buttons open a panel with the image or the code in it, to save or copy by hand.
+Opened locally, all three just download.
 
 ## How it works
 
