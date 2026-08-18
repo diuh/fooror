@@ -96,6 +96,22 @@ button { font: inherit; color: inherit; cursor: pointer; background: none; borde
 .workcard:hover .mask, .workcard:focus-within .mask { inset: 0 0 var(--reveal, 132px) 0; }
 .workcard:hover .mask > *, .workcard:focus-within .mask > * { transform: scale(1.08); }
 
+/* navigation link — header + footer. Sentence case, hover goes accent and
+   underlines (matches the Figma NavLink component). This is THE nav link
+   style; every nav item across the site uses .nav-link, not a per-place rule. */
+.nav-link {
+  font-family: var(--font-body); font-weight: 400; line-height: 0.9;
+  letter-spacing: -0.02em; position: relative; display: inline-block;
+  transition: color 0.25s;
+}
+.nav-link::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -3px; height: 1px;
+  background: currentColor; transform: scaleX(0); transform-origin: left;
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.nav-link:hover, .nav-link:focus-visible { color: var(--text-accent); }
+.nav-link:hover::after, .nav-link:focus-visible::after { transform: scaleX(1); }
+
 /* underline-on-hover link used site-wide */
 .link-ul { position: relative; display: inline-block; }
 .link-ul::after {

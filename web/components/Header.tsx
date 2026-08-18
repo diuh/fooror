@@ -25,60 +25,82 @@ function useLocalTime() {
   return time;
 }
 
+function Logo() {
+  return (
+    <Link href="/" className="flex items-center gap-4" aria-label={`${site.name} home`}>
+      <span className="grid size-10 shrink-0 place-items-center rounded-full bg-inverse text-[var(--text-on-dark)]">
+        <IconAsterisk size={22} stroke={2} />
+      </span>
+      <span className="t-label text-[16px] tracking-[-0.02em]">{site.name}</span>
+    </Link>
+  );
+}
+
 export function Header() {
   const time = useLocalTime();
   const [open, setOpen] = useState(false);
+  const [city, country] = site.location.split(", ");
 
   return (
-    <Band as="header" className="relative z-30">
-      <div className="flex items-center justify-between py-5">
-        <Link href="/" className="flex items-center gap-2" aria-label={`${site.name} home`}>
-          <IconAsterisk size={22} stroke={2} />
-          <span className="t-label t-label-sm text-[16px]">{site.name}</span>
-        </Link>
-
-        <nav className="hidden items-center gap-10 md:flex">
-          {nav.map((item) => (
-            <Link key={item.href} href={item.href} className="t-label t-label-sm text-[14px] link-ul">
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-
-        <div className="flex items-center gap-6">
-          <div className="hidden items-center gap-6 lg:flex">
-            <span className="t-label t-label-sm text-[14px] text-muted">{site.location}</span>
-            <span className="t-label t-label-sm text-[14px] text-muted">
-              Local time{" "}
-              <span className="text-ink tabular-nums">{time || "—"}</span>
-            </span>
+    <Band as="header" className="relative z-30 pt-5">
+      <div className="rounded-[60px] bg-page py-2.5 pl-5 pr-2.5">
+        {/* desktop: 1fr / 3fr / 1fr grid, exactly as the macket */}
+        <div className="flex items-center justify-between gap-5 md:grid md:grid-cols-[1fr_3fr_1fr]">
+          {/* col 1 — logo + tagline */}
+          <div className="flex items-center justify-between gap-6">
+            <Logo />
+            <p className="hidden w-[210px] text-right text-[14px] leading-[0.9] tracking-[-0.02em] lg:block">
+              Revenue-driven<br />design studio
+            </p>
           </div>
-          <button
-            type="button"
-            onClick={() => setOpen((v) => !v)}
-            aria-label={open ? "Close menu" : "Open menu"}
-            aria-expanded={open}
-            className="flex size-12 items-center justify-center rounded-full bg-inverse text-[var(--text-on-dark)] md:hidden"
-          >
-            {open ? <IconX size={22} stroke={2} /> : <IconMenu2 size={22} stroke={2} />}
-          </button>
-        </div>
-      </div>
 
-      {open && (
-        <nav className="flex flex-col gap-4 border-t border-line py-6 md:hidden">
-          {nav.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={() => setOpen(false)}
-              className="t-label t-label-sm text-[24px]"
+          {/* col 2 — primary nav */}
+          <nav className="hidden items-center justify-center gap-10 md:flex">
+            {nav.map((item) => (
+              <Link key={item.href} href={item.href} className="nav-link text-[16px]">
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+
+          {/* col 3 — locale + local time + menu */}
+          <div className="flex items-center justify-end gap-6 md:justify-between">
+            <div className="hidden items-center gap-6 text-[14px] leading-[0.9] tracking-[-0.02em] lg:flex">
+              <p>
+                {city},<br />{country}
+              </p>
+              <p className="text-right tabular-nums">
+                Local time<br />{time || "—"}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setOpen((v) => !v)}
+              aria-label={open ? "Close menu" : "Open menu"}
+              aria-expanded={open}
+              className="grid size-10 shrink-0 place-items-center rounded-full bg-inverse text-[var(--text-on-dark)] transition-transform hover:scale-95"
             >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-      )}
+              {open ? <IconX size={22} stroke={2} /> : <IconMenu2 size={22} stroke={2} />}
+            </button>
+          </div>
+        </div>
+
+        {/* dropdown menu (all breakpoints — the macket's menu button is always present) */}
+        {open && (
+          <nav className="mt-2.5 flex flex-col gap-2 border-t border-line px-1 py-6">
+            {nav.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setOpen(false)}
+                className="t-display w-fit text-[clamp(28px,4vw,40px)] transition-colors hover:text-[var(--text-accent)]"
+              >
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+        )}
+      </div>
     </Band>
   );
 }

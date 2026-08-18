@@ -21,7 +21,7 @@ export function Footer() {
               <nav key={col.heading} className="flex flex-col gap-4">
                 <span className="t-label t-label-sm text-[14px] text-muted">{col.heading}</span>
                 {col.links.map((l) => (
-                  <Link key={l.href} href={l.href} className="t-label t-label-sm text-[14px] link-ul">
+                  <Link key={l.href} href={l.href} className="nav-link text-[14px]">
                     {l.label}
                   </Link>
                 ))}

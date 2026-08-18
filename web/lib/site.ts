@@ -12,7 +12,7 @@ export const site = {
   url: "https://fooror.com",
   email: "info@fooror.com",
   whatsapp: "+380 00 000 00 00",
-  location: "Ukraine",
+  location: "Kyiv, Ukraine",
   timezone: "Europe/Kyiv",
 };
 
