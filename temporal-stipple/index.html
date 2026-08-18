@@ -6,6 +6,9 @@
 <title>Temporal Stipple</title>
 <style>
   :root{
+    /* One committed visual world: a dark instrument panel around the flat
+       light plate the dots are printed on. Every color is painted explicitly
+       so the page holds on either host background. */
     --bg:#0e0e11;
     --panel:#16161b;
     --panel-2:#1d1d24;
@@ -43,6 +46,7 @@
   }
   .hud{
     position:absolute;left:16px;top:14px;
+    font-variant-numeric:tabular-nums;
     display:flex;gap:14px;align-items:center;
     font:11px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
     color:var(--ink-dim);
@@ -87,6 +91,7 @@
   .row .head span:first-child{font-size:12px}
   .row .head output{
     font:11px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-variant-numeric:tabular-nums;
     color:var(--ink-dim);
   }
   input[type=range]{
@@ -137,7 +142,9 @@
     color:var(--ink-dim);cursor:pointer;font-size:11px;letter-spacing:.05em;
   }
   .file:hover{border-color:#55556a;color:var(--ink)}
-  .file input{display:none}
+  .file input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+  .file:has(input:focus-visible){border-color:var(--accent);color:var(--ink)}
+  :where(button,input,label.file):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   .hint{color:#6d6d7c;font-size:10.5px;line-height:1.5;margin-top:8px}
   input[type=color]{
     width:100%;height:30px;padding:0;border:1px solid var(--line);border-radius:6px;background:var(--panel-2);cursor:pointer;
@@ -1013,6 +1020,15 @@ lastStill = demo; lastStillLabel = 'demo';
 grabPixels();
 setCount(P.count);
 reseed();
+
+// The seeded frame already resembles the source, so holding still is a real
+// first view rather than a blank one. Play is one keystroke away.
+if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+  P.running = false;
+  $('bPlay').textContent = 'Play';
+  $('hudState').textContent = 'paused';
+  note('Paused: your system asks for reduced motion. Press Play or Space to start.');
+}
 
 new ResizeObserver(() => resize(false)).observe(stage);
 
