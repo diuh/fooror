@@ -80,10 +80,13 @@ you were in, what the hints said) is reset in the copy.
 
 **Copy settings** gives the parameters alone, as a JS object literal.
 
-An embedded copy of the page — the artifact viewer, or any cross-origin iframe —
-cannot start a download; the host sandbox drops it silently. There the export
-buttons open a panel with the image or the code in it, to save or copy by hand.
-Opened locally, all three just download.
+Saving takes whichever route the page actually has. Opened locally it is a plain
+download. In the claude.ai artifact viewer a page may never start its own
+download, so the page asks for the `downloads` capability and the viewer confirms
+each save. In any other embedding — a cross-origin iframe elsewhere — neither
+route exists and the host drops the download silently, so the buttons open a
+panel with the image or the code in it, to save or copy by hand. The exported
+standalone copy carries the same logic and falls back to the plain download.
 
 ## How it works
 

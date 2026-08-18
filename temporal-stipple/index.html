@@ -315,7 +315,7 @@
         <button class="btn" id="bHtml">HTML</button>
       </div>
       <div class="btns">
-        <button class="btn" id="bSettings">Copy settings</button>
+        <button class="btn" id="bSettings">Show settings</button>
       </div>
       <div class="hint" id="exportHint">PNG saves what you see at the chosen scale. HTML saves a standalone copy of this sketch with the current settings baked in.</div>
     </div>
@@ -1210,20 +1210,54 @@ function stamp(){
          z(d.getHours()) + z(d.getMinutes()) + z(d.getSeconds());
 }
 
-/** Hand a file to the viewer. An embedded page cannot start a download — the
- *  host sandbox drops it silently — so there it also opens a panel the file
- *  can be saved or copied from by hand. */
-function deliver(filename, mime, payload, kind){
+/** The claude.ai artifact viewer never lets a page start its own download;
+ *  it mediates saves through this capability instead. Absent everywhere else,
+ *  including in an exported copy of this page, so it is resolved once and the
+ *  plain-anchor path stays the default. */
+let downloadsApi;                                   // undefined = not asked yet
+async function getDownloads(){
+  if (downloadsApi !== undefined) return downloadsApi;
   try {
+    downloadsApi = (window.claude && typeof window.claude.use === 'function')
+      ? await window.claude.use('downloads')
+      : null;
+  } catch (e){ downloadsApi = null; }
+  return downloadsApi;
+}
+
+/** Hand a file to the viewer, by whichever route this page actually has. */
+async function deliver(filename, payload, kind){
+  const dl = await getDownloads();
+  if (dl){
+    try {
+      await dl.save({ filename: filename, data: payload });
+      note2('Saved ' + filename + '.');
+    } catch (err){
+      const code = (err && err.code) || 'error';
+      if (code === 'declined'){ note2('Save cancelled.'); return; }
+      if (code === 'rejected_extension' || code === 'extension_not_enabled'){
+        note2('This viewer will not save that file type.');
+      } else {
+        note2('Could not save the file (' + code + ').');
+      }
+      if (kind === 'text') openSheet(filename, payload, kind);   // still copyable
+    }
+    return;
+  }
+
+  let url = null;
+  try {
+    url = URL.createObjectURL(kind === 'image' ? payload
+                                               : new Blob([payload], { type: 'text/html' }));
     const a = document.createElement('a');
-    a.href = kind === 'image' ? payload
-                              : URL.createObjectURL(new Blob([payload], { type: mime }));
+    a.href = url;
     a.download = filename;
     document.body.appendChild(a);
     a.click();
     a.remove();
-    if (kind !== 'image') setTimeout(() => URL.revokeObjectURL(a.href), 8000);
-  } catch (e){ /* fall through to the panel */ }
+    setTimeout(() => URL.revokeObjectURL(url), 20000);
+  } catch (e){ url = null; }
+  // some other embedding host: no capability, and its sandbox eats the anchor
   if (isEmbedded()) openSheet(filename, payload, kind);
 }
 
@@ -1233,8 +1267,13 @@ function exportImage(){
   c.width  = Math.max(1, Math.round(W * scale));
   c.height = Math.max(1, Math.round(H * scale));
   paint(c.getContext('2d'), scale);
-  deliver('temporal-stipple-' + stamp() + '.png', 'image/png', c.toDataURL('image/png'), 'image');
-  note2('Exported ' + c.width + ' \u00d7 ' + c.height + ' px.');
+  const size = c.width + ' \u00d7 ' + c.height + ' px';
+  note2('Rendering ' + size + '\u2026');
+  c.toBlob(blob => {
+    if (!blob){ note2('Could not render the export.'); return; }
+    note2('Exported ' + size + '.');
+    deliver('temporal-stipple-' + stamp() + '.png', blob, 'image');
+  }, 'image/png');
 }
 
 const EXPORT_KEYS = ['count','dotSize','dotColor','colorMode','contrast','invert',
@@ -1250,10 +1289,7 @@ function paramsLiteral(){
 }
 
 function exportSettings(){
-  deliver('temporal-stipple-settings.js', 'text/javascript',
-          'const P = ' + paramsLiteral() + ';\n', 'text');
-  if (!isEmbedded()) openSheet('temporal-stipple-settings.js',
-                               'const P = ' + paramsLiteral() + ';\n', 'text');
+  openSheet('settings', 'const P = ' + paramsLiteral() + ';\n', 'text');
 }
 
 /** A standalone copy of this page with the current settings as its defaults.
@@ -1292,8 +1328,8 @@ function exportHTML(){
     '<video id="srcVideo" playsinline muted loop></video>\n' +
     '<script id="tsScript">\n' + script + '\n<\/script>\n</body>\n</html>\n';
 
-  deliver('temporal-stipple-' + stamp() + '.html', 'text/html', html, 'text');
   note2('Exported a standalone page, ' + Math.round(html.length / 1024) + ' KB.');
+  deliver('temporal-stipple-' + stamp() + '.html', html, 'text');
 }
 
 function note2(msg){ $('exportHint').textContent = msg; }
@@ -1301,34 +1337,40 @@ function note2(msg){ $('exportHint').textContent = msg; }
 /* ------------------------------------------------------------------ *
  * Export panel (the fallback when the page cannot start a download)
  * ------------------------------------------------------------------ */
+let sheetUrl = null;
 function openSheet(filename, payload, kind){
   const body = $('sheetBody');
   body.textContent = '';
+  if (sheetUrl){ URL.revokeObjectURL(sheetUrl); sheetUrl = null; }
   $('sheetTitle').textContent = filename;
   if (kind === 'image'){
     const img = document.createElement('img');
-    img.src = payload;
+    sheetUrl = URL.createObjectURL(payload);
+    img.src = sheetUrl;
     img.alt = 'Exported stipple';
     body.appendChild(img);
-    $('sheetNote').textContent = isEmbedded()
-      ? 'An embedded page cannot save files. Right-click the image (long-press on touch) and choose Save image as.'
-      : 'Saved to your downloads.';
+    $('sheetNote').textContent =
+      'This page cannot save files here. Right-click the image (long-press on touch) and choose Save image as.';
     $('sheetCopy').hidden = true;
   } else {
     const ta = document.createElement('textarea');
     ta.readOnly = true;
     ta.value = payload;
     body.appendChild(ta);
-    $('sheetNote').textContent = isEmbedded()
-      ? 'An embedded page cannot save files. Copy the code below and save it yourself.'
-      : 'Saved to your downloads. You can also copy it from here.';
+    $('sheetNote').textContent = filename === 'settings'
+      ? 'The current parameters. Paste them over the P object in the sketch\u2019s source.'
+      : 'Copy this and save it as an .html file — it opens as a standalone copy of the sketch.';
     $('sheetCopy').hidden = false;
     $('sheetCopy').textContent = 'Copy';
   }
   $('sheet').hidden = false;
 }
 
-function closeSheet(){ $('sheet').hidden = true; $('sheetBody').textContent = ''; }
+function closeSheet(){
+  $('sheet').hidden = true;
+  $('sheetBody').textContent = '';
+  if (sheetUrl){ URL.revokeObjectURL(sheetUrl); sheetUrl = null; }
+}
 
 /* ------------------------------------------------------------------ *
  * Controls
