@@ -1,0 +1,75 @@
+/* Fooror design tokens — generated from the Figma variable collections.
+   Figma file CHI3cmn5hgf3KleaFW5mdX, page "◆ Design System".
+   Names match the Figma code syntax exactly, so a token renamed in Figma
+   should be renamed here in the same commit. */
+
+:root {
+  /* --- primitives: never referenced directly in components --- */
+  --c-black: #000000;
+  --c-white: #ffffff;
+  --c-plate: #e5e5ed;
+  --c-grey: #95959d;
+  --c-accent: #f90044;
+  --c-line: #d9d9d9;
+  --c-black-20: rgb(0 0 0 / 0.2);
+
+  /* --- semantic colour: this is what components use --- */
+  --bg-page: var(--c-white);
+  --bg-plate: var(--c-plate);
+  --bg-inverse: var(--c-black);
+  --bg-accent: var(--c-accent);
+  --text-primary: var(--c-black);
+  --text-muted: var(--c-grey);
+  --text-accent: var(--c-accent);
+  --text-on-accent: var(--c-white);
+  --text-on-dark: var(--c-white);
+  --text-faded: var(--c-black-20);
+  --border-subtle: var(--c-line);
+  --border-strong: var(--c-black);
+
+  /* --- spacing: irregular by design, numeric names on purpose --- */
+  --space-10: 10px;  --space-12: 12px;  --space-20: 20px;  --space-24: 24px;
+  --space-30: 30px;  --space-32: 32px;  --space-40: 40px;  --space-50: 50px;
+  --space-60: 60px;  --space-80: 80px;  --space-120: 120px; --space-160: 160px;
+
+  /* --- radius: two values, nothing between --- */
+  --radius-none: 0px;
+  --radius-pill: 1000px;
+
+  /* --- icon sizes --- */
+  --icon-24: 24px;
+  --icon-48: 48px;
+  --icon-98: 98px;
+
+  /* --- layout --- */
+  --layout-max-width: 1920px;
+  --layout-page-margin: 376px;
+  --layout-container: 1168px;
+  --layout-gutter: 20px;
+
+  /* --- type families --- */
+  --font-display: "Archivo Narrow", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-body: "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+/* Type ramp. Leading is 90% everywhere — that is the macket, not an oversight.
+   Tracking is in em so it survives any font-size change. */
+.t-display-228 { font: 500 228px/0.9 var(--font-display); letter-spacing: -0.04em; }
+.t-display-146 { font: 500 146px/0.9 var(--font-display); letter-spacing: -0.04em; }
+.t-display-110 { font: 500 110px/0.9 var(--font-display); letter-spacing: -0.04em; }
+.t-display-80  { font: 500 80px/0.9  var(--font-display); letter-spacing: -0.04em; }
+.t-display-40  { font: 500 40px/0.9  var(--font-display); letter-spacing: -0.04em; }
+
+/* Labels are always uppercase. Large ones ride tighter than small ones. */
+.t-label-32 { font: 700 32px/0.9 var(--font-display); letter-spacing: -0.05em; text-transform: uppercase; }
+.t-label-24 { font: 700 24px/0.9 var(--font-display); letter-spacing: -0.05em; text-transform: uppercase; }
+.t-label-20 { font: 700 20px/0.9 var(--font-display); letter-spacing: -0.05em; text-transform: uppercase; }
+.t-label-16 { font: 700 16px/0.9 var(--font-display); letter-spacing: -0.02em; text-transform: uppercase; }
+.t-label-14 { font: 700 14px/0.9 var(--font-display); letter-spacing: -0.02em; text-transform: uppercase; }
+
+.t-body-32      { font: 400 32px/0.9 var(--font-body); letter-spacing: -0.02em; }
+.t-body-24      { font: 400 24px/0.9 var(--font-body); letter-spacing: -0.02em; }
+.t-body-16      { font: 400 16px/0.9 var(--font-body); letter-spacing: -0.02em; }
+.t-body-14      { font: 400 14px/0.9 var(--font-body); letter-spacing: -0.02em; }
+.t-body-24-bold { font: 700 24px/0.9 var(--font-body); letter-spacing: -0.02em; }
+.t-body-16-bold { font: 700 16px/0.9 var(--font-body); letter-spacing: -0.02em; }

@@ -1,0 +1,18 @@
+{
+  "runId": "fooror-ds-2026-08",
+  "file": { "key": "CHI3cmn5hgf3KleaFW5mdX", "designSystemPage": "70:2", "root": "70:3",
+            "macketPage": "0:1", "macketFrame": "30:180" },
+  "phase": "phase4-complete",
+  "collections": {
+    "Primitives": "VariableCollectionId:65:2",
+    "Color": "VariableCollectionId:65:3",
+    "Spacing": "VariableCollectionId:66:2",
+    "Sizing": "VariableCollectionId:66:3"
+  },
+  "components": {
+    "Icon": "75:61", "Button": "76:32", "Tag": "80:36", "SectionHeading": "80:51",
+    "Stat": "80:57", "JournalCard": "82:45", "ServiceRow": "83:71", "CTABand": "85:55",
+    "TeaserCard": "85:87", "Testimonial": "86:65", "WorkCard": "86:106",
+    "Header": "87:89", "NavLink": "87:88", "Logo": "87:74", "Footer": "88:84", "Marquee": "88:144"
+  }
+}

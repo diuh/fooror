@@ -1,0 +1,124 @@
+@import "tailwindcss";
+
+/* ============================================================
+   Fooror design tokens — mirror of design-system/tokens.css and
+   the Figma variable collections. Font families are injected by
+   next/font in layout.tsx as --font-display / --font-body.
+   ============================================================ */
+:root {
+  /* primitives */
+  --c-black: #000000;
+  --c-white: #ffffff;
+  --c-plate: #e5e5ed;
+  --c-grey: #95959d;
+  --c-accent: #f90044;
+  --c-line: #d9d9d9;
+
+  /* semantic */
+  --bg-page: var(--c-white);
+  --bg-plate: var(--c-plate);
+  --bg-inverse: var(--c-black);
+  --bg-accent: var(--c-accent);
+  --text-primary: var(--c-black);
+  --text-muted: var(--c-grey);
+  --text-accent: var(--c-accent);
+  --text-on-accent: var(--c-white);
+  --text-on-dark: var(--c-white);
+  --text-faded: rgb(0 0 0 / 0.2);
+  --border-subtle: var(--c-line);
+  --border-strong: var(--c-black);
+
+  /* layout */
+  --container: 1168px;
+  --page-margin: 376px;
+  --gutter: 20px;
+}
+
+/* expose tokens to Tailwind utilities (bg-plate, text-accent, …) */
+@theme inline {
+  --color-page: var(--bg-page);
+  --color-plate: var(--bg-plate);
+  --color-inverse: var(--bg-inverse);
+  --color-accent: var(--bg-accent);
+  --color-ink: var(--text-primary);
+  --color-muted: var(--text-muted);
+  --color-line: var(--border-subtle);
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
+}
+
+html { -webkit-text-size-adjust: 100%; }
+body {
+  background: var(--bg-plate);
+  color: var(--text-primary);
+  font-family: var(--font-body), "Helvetica Neue", Helvetica, Arial, sans-serif;
+  letter-spacing: -0.02em;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+::selection { background: var(--c-accent); color: #fff; }
+
+/* ---- type ramp (leading 0.9 everywhere; tracking per size) ---- */
+.t-display { font-family: var(--font-display); font-weight: 500; line-height: 0.9; letter-spacing: -0.04em; }
+.t-label   { font-family: var(--font-display); font-weight: 700; line-height: 0.9; text-transform: uppercase; }
+.t-label-lg { letter-spacing: -0.05em; }
+.t-label-sm { letter-spacing: -0.02em; }
+
+/* fluid display steps: scale down on narrow viewports, reach macket sizes at ≥1440 */
+.d-mega { font-size: clamp(88px, 12vw, 228px); }
+.d-hero { font-size: clamp(56px, 7.6vw, 128px); }
+.d-110  { font-size: clamp(46px, 5.7vw, 110px); }
+.d-80   { font-size: clamp(38px, 4.2vw, 80px); }
+.d-40   { font-size: clamp(28px, 2.6vw, 40px); }
+
+a { color: inherit; text-decoration: none; }
+button { font: inherit; color: inherit; cursor: pointer; background: none; border: 0; }
+
+/* ---- marquee ---- */
+@keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.marquee-track {
+  display: inline-flex; align-items: center; gap: 40px; white-space: nowrap;
+  animation: marquee 30s linear infinite; will-change: transform;
+}
+@media (prefers-reduced-motion: reduce) { .marquee-track { animation: none; } }
+
+/* ---- work card hover reveal (the fooror.com mechanic) ---- */
+.workcard { position: relative; overflow: hidden; background: var(--bg-plate); }
+.workcard .mask {
+  position: absolute; inset: 0; overflow: hidden; z-index: 1;
+  transition: inset 0.55s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.workcard .mask > * {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+  transition: transform 0.55s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.workcard .info { position: absolute; inset: auto 0 0 0; z-index: 0; }
+.workcard:hover .mask, .workcard:focus-within .mask { inset: 0 0 var(--reveal, 132px) 0; }
+.workcard:hover .mask > *, .workcard:focus-within .mask > * { transform: scale(1.08); }
+
+/* navigation link — header + footer. Sentence case, hover goes accent and
+   underlines (matches the Figma NavLink component). This is THE nav link
+   style; every nav item across the site uses .nav-link, not a per-place rule. */
+.nav-link {
+  font-family: var(--font-body); font-weight: 400; line-height: 0.9;
+  letter-spacing: -0.02em; position: relative; display: inline-block;
+  transition: color 0.25s;
+}
+.nav-link::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -3px; height: 1px;
+  background: currentColor; transform: scaleX(0); transform-origin: left;
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.nav-link:hover, .nav-link:focus-visible { color: var(--text-accent); }
+.nav-link:hover::after, .nav-link:focus-visible::after { transform: scaleX(1); }
+
+/* underline-on-hover link used site-wide */
+.link-ul { position: relative; display: inline-block; }
+.link-ul::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -2px; height: 1px;
+  background: currentColor; transform: scaleX(0); transform-origin: left;
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.link-ul:hover::after, .link-ul:focus-visible::after { transform: scaleX(1); }
+
+:where(a, button):focus-visible { outline: 2px solid var(--c-accent); outline-offset: 3px; }
