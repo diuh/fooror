@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { IconAsterisk, IconMail, IconBrandWhatsapp } from "@tabler/icons-react";
+import { IconMail, IconBrandWhatsapp } from "@tabler/icons-react";
 import { site, footerColumns } from "@/lib/site";
 import { Band } from "./ui/Container";
+import { LogoMark } from "./Logo";
 
 export function Footer() {
   return (
@@ -9,9 +10,8 @@ export function Footer() {
       <div className="bg-plate px-6 pt-20 pb-10 md:px-10">
         <div className="flex flex-col justify-between gap-12 lg:flex-row">
           <div className="flex flex-col gap-5">
-            <Link href="/" className="flex items-center gap-2">
-              <IconAsterisk size={22} stroke={2} />
-              <span className="t-label t-label-sm text-[16px]">{site.name}</span>
+            <Link href="/" className="inline-flex" aria-label={`${site.name} — home`}>
+              <LogoMark className="h-9 w-auto" />
             </Link>
             <p className="text-[14px] text-muted">{site.tagline}</p>
           </div>
